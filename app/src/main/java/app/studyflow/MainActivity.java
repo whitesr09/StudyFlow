@@ -317,9 +317,12 @@ public class MainActivity extends Activity {
             String title=required(name);
             if(content.getText().length()>200000)throw new IllegalArgumentException("Keep written notes below 200,000 characters.");
             if(store.find("chapters",chapter.optString("id"))==null)throw new IllegalArgumentException("This chapter was deleted.");
-            if(note==null)store.array("notes").put(Store.object("id",Store.id(),"chapter",chapter.optString("id"),"name",title,"type","text","content",content.getText().toString()));
-            else try{note.put("name",title);note.put("content",content.getText().toString());}catch(JSONException e){throw new IllegalArgumentException(e);}
-            if(!save())throw new IllegalArgumentException("Note could not be saved. Try again.");toast("Note saved.");
+            String snapshot=store.root.toString();
+            JSONObject target=note==null?null:store.find("notes",note.optString("id"));
+            if(note!=null&&target==null)throw new IllegalArgumentException("This note was deleted.");
+            if(target==null)store.array("notes").put(Store.object("id",Store.id(),"chapter",chapter.optString("id"),"name",title,"type","text","content",content.getText().toString()));
+            else try{target.put("name",title);target.put("content",content.getText().toString());}catch(JSONException e){throw new IllegalArgumentException(e);}
+            if(!save()){try{store.root=new JSONObject(snapshot);}catch(JSONException ignored){}throw new IllegalArgumentException("Note could not be saved. Try again.");}toast("Note saved.");
         });
     }
     @Override protected void onActivityResult(int request,int result,Intent data) {
@@ -329,13 +332,14 @@ public class MainActivity extends Activity {
         String mime=getContentResolver().getType(uri);if(mime==null)mime="application/octet-stream";
         String name="Imported note";
         try(android.database.Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())name=c.getString(0);}catch(Exception ignored){}
+        if(name==null||name.trim().isEmpty())name="Imported note";
         final String type=mime, title=name, filename=Store.id();toast("Copying note for offline access…");
         worker.execute(()->{
             File file=new File(getFilesDir(),filename);
             try(InputStream in=getContentResolver().openInputStream(uri);OutputStream out=new FileOutputStream(file)){
                 if(in==null)throw new IOException("File unavailable");byte[] buffer=new byte[32768];int n;long total=0;
                 while((n=in.read(buffer))!=-1){total+=n;if(total>100L*1024*1024)throw new IOException("Use a file smaller than 100 MB.");out.write(buffer,0,n);}
-                runOnUiThread(()->{if(isDestroyed())return;
+                runOnUiThread(()->{if(isDestroyed()){file.delete();return;}
                     if(store.find("chapters",chapterId)==null){file.delete();return;}
                     store.array("notes").put(Store.object("id",Store.id(),"chapter",chapterId,"name",title,"type",type,"file",filename,"page",1));
                     if(save())toast("Saved offline. Reopen notes to see the attachment.");
@@ -355,7 +359,7 @@ public class MainActivity extends Activity {
         PageScroll sc=new PageScroll();sc.setFillViewport(true);sc.setClipToPadding(false);reader.addView(sc,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout content=column();sc.addView(content,new ScrollView.LayoutParams(-1,-2));
         ImageView image=new ImageView(this);image.setAdjustViewBounds(true);image.setContentDescription("Page of "+note.optString("name"));content.addView(image,new LinearLayout.LayoutParams(-1,-2));
-        TextView prose=text("",store.root.optInt("readerTextSize",18),ink,false);prose.setPadding(dp(18),dp(18),dp(18),dp(18));prose.setTextIsSelectable(true);prose.setLineSpacing(dp(7),1);prose.setBackground(shape(card,20));prose.setVisibility(View.GONE);content.addView(prose,new LinearLayout.LayoutParams(-1,-2));
+        TextView prose=text("",store.root.optInt("readerTextSize",18),ink,false);prose.setPadding(dp(18),dp(18),dp(18),dp(18));prose.setTextIsSelectable(true);sc.selectable=prose;prose.setLineSpacing(dp(7),1);prose.setBackground(shape(card,20));prose.setVisibility(View.GONE);content.addView(prose,new LinearLayout.LayoutParams(-1,-2));
         String type=note.optString("type"),name=note.optString("name");
         boolean pdf=type.equals("application/pdf")||DocumentText.extension(name).equals("pdf");
         boolean isText=!pdf&&DocumentText.supports(name,type);
@@ -385,14 +389,14 @@ public class MainActivity extends Activity {
                         try(ParcelFileDescriptor fd=ParcelFileDescriptor.open(file,ParcelFileDescriptor.MODE_READ_ONLY);PdfRenderer r=new PdfRenderer(fd)){
                             int pages=r.getPageCount();if(pages<1)throw new IOException("Empty PDF");int safe=Math.min(index,pages-1);Bitmap bitmap;
                             try(PdfRenderer.Page p=r.openPage(safe)){float scale=Math.min(2f,1600f/Math.max(p.getWidth(),p.getHeight()));bitmap=Bitmap.createBitmap(Math.max(1,(int)(p.getWidth()*scale)),Math.max(1,(int)(p.getHeight()*scale)),Bitmap.Config.ARGB_8888);bitmap.eraseColor(Color.WHITE);p.render(bitmap,null,null,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);}
-                            runOnUiThread(()->{if(token!=renderToken||isDestroyed()){bitmap.recycle();return;}count[0]=pages;page[0]=safe;setPageImage(image,bitmap);finished.run();});
+                            runOnUiThread(()->{if(token!=renderToken||isDestroyed()){bitmap.recycle();return;}count[0]=pages;page[0]=safe;image.setVisibility(View.VISIBLE);prose.setVisibility(View.GONE);setPageImage(image,bitmap);finished.run();});
                         }
                     } else {
                         BitmapFactory.Options opts=new BitmapFactory.Options();opts.inJustDecodeBounds=true;BitmapFactory.decodeFile(file.getPath(),opts);
                         if(opts.outWidth<=0||opts.outHeight<=0)throw new IOException("This format needs a compatible app. Tap the menu, then Open with.");
                         opts.inSampleSize=1;while(Math.max(opts.outWidth,opts.outHeight)/opts.inSampleSize>1800)opts.inSampleSize*=2;
                         opts.inJustDecodeBounds=false;Bitmap bitmap=BitmapFactory.decodeFile(file.getPath(),opts);if(bitmap==null)throw new IOException("Image cannot be decoded.");
-                        runOnUiThread(()->{if(token!=renderToken||isDestroyed()){bitmap.recycle();return;}count[0]=1;page[0]=0;setPageImage(image,bitmap);finished.run();});
+                        runOnUiThread(()->{if(token!=renderToken||isDestroyed()){bitmap.recycle();return;}count[0]=1;page[0]=0;image.setVisibility(View.VISIBLE);prose.setVisibility(View.GONE);setPageImage(image,bitmap);finished.run();});
                     }
                 }catch(Exception|OutOfMemoryError e){runOnUiThread(()->{if(token!=renderToken||isDestroyed())return;busy[0]=false;updateControls.run();status.setText("Preview unavailable");image.setVisibility(View.GONE);prose.setVisibility(View.VISIBLE);prose.setText("This document could not be read here.\n\n"+(e.getMessage()==null?"Try a smaller, unlocked file.":e.getMessage()));button(content,"Open with another app",true,()->openExternal(note));});}
             });
@@ -404,7 +408,7 @@ public class MainActivity extends Activity {
             if(count[0]>0&&!busy[0]) {
                 label(f,isText?"Reflowed text · original layout and images available through Open with.":"Swipe left/right, or swipe up at the bottom to turn a page.",13,muted,false);
                 button(f,"Go to "+(isText?"section":"page"),true,()->{menu[0].dismiss();LinearLayout jump=form();EditText input=field(jump,"Number · 1 to "+count[0],String.valueOf(page[0]+1),true);formDialog("Jump to position",jump,"Open",()->{page[0]=number(input,1,count[0])-1;render[0].run();});});
-                button(f,bookmarked(note,page[0]+1)?"★ Remove bookmark":"☆ Bookmark this position",false,()->{toggleBookmark(note,page[0]+1);finished.run();menu[0].dismiss();});
+                button(f,bookmarked(note,page[0]+1)?"★ Remove bookmark":"☆ Bookmark this position",false,()->{toggleBookmark(note,page[0]+1);status.setText((isText?"Text section ":"Page ")+(page[0]+1)+" / "+count[0]+"  ·  "+(bookmarked(note,page[0]+1)?"★ Saved":"Swipe to turn"));menu[0].dismiss();});
                 JSONArray marks=note.optJSONArray("bookmarks");if(marks!=null&&marks.length()>0)button(f,"Saved bookmarks ("+marks.length()+")",false,()->{menu[0].dismiss();LinearLayout list=form();final AlertDialog[] bookmarks={null};for(int i=0;i<marks.length();i++){final int at=marks.optInt(i);if(at>0&&at<=count[0])button(list,"★  "+(isText?"Section ":"Page ")+at,false,()->{page[0]=at-1;render[0].run();bookmarks[0].dismiss();});}bookmarks[0]=sheet("Bookmarks",list,"Close",null);});
                 if(isText) {
                     button(f,"Find in document",false,()->{menu[0].dismiss();LinearLayout search=form();EditText input=field(search,"Find text",query[0],false);formDialog("Find in document",search,"Find next section",()->{String q=required(input);int found=-1;int start=q.equals(query[0])?page[0]+1:page[0];for(int offset=0;offset<count[0];offset++){int at=(start+offset)%count[0];if(document[0].pages.get(at).toLowerCase(Locale.ROOT).contains(q.toLowerCase(Locale.ROOT))){found=at;break;}}if(found<0)throw new IllegalArgumentException("No matches found.");query[0]=q;page[0]=found;render[0].run();});});
@@ -428,12 +432,12 @@ public class MainActivity extends Activity {
         for(int i=0;i<a.length();i++)if(a.optInt(i)==page){a.remove(i);save();return;}a.put(page);save();
     }
     private final class PageScroll extends ScrollView {
-        Runnable previous=()->{},next=()->{};float x,y;long down;boolean top,bottom,multi;
+        TextView selectable;Runnable previous=()->{},next=()->{};float x,y;long down;boolean top,bottom,multi;
         PageScroll(){super(MainActivity.this);}
         @Override public boolean dispatchTouchEvent(MotionEvent event) {
             if(event.getActionMasked()==MotionEvent.ACTION_DOWN){x=event.getX();y=event.getY();down=event.getEventTime();top=!canScrollVertically(-1);bottom=!canScrollVertically(1);multi=false;}
             if(event.getPointerCount()>1)multi=true;
-            if(event.getActionMasked()==MotionEvent.ACTION_UP&&!multi&&event.getEventTime()-down<650){
+            if(event.getActionMasked()==MotionEvent.ACTION_UP&&!multi&&(selectable==null||!selectable.hasSelection())&&event.getEventTime()-down<650){
                 float dx=event.getX()-x,dy=event.getY()-y;
                 boolean horizontal=Math.abs(dx)>dp(72)&&Math.abs(dx)>Math.abs(dy)*1.6f;
                 boolean edge=Math.abs(dy)>dp(100)&&Math.abs(dy)>Math.abs(dx)*2&&((dy<0&&bottom)||(dy>0&&top));
