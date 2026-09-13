@@ -24,7 +24,10 @@ public class MainActivity extends Activity {
     private Store store;
     private LinearLayout root,body,nav;
     private String tab="Today",selectedSubject=null,pendingChapter=null;
-    private int bg,card,ink,muted,line,accent;
+    private int bg,card,ink,muted,line,accent,onAccent;
+    private boolean minimal,lightTheme;
+    private String pendingExportNote;
+    private static final int EXPORT_NOTE=42;
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final Handler handler=new Handler(Looper.getMainLooper());
     private boolean reading=false;
@@ -39,27 +42,26 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         try { store=new Store(this); }
         catch(Exception e) {
-            new AlertDialog.Builder(this).setTitle("Could not open your study data")
-                .setMessage("Your saved file has been kept. Close the app and try again; no data has been reset.")
-                .setPositiveButton("Close",(d,w)->finish()).setCancelable(false).show(); return;
+            colors();LinearLayout f=form();label(f,"Your saved file has been kept. Close the app and try again; no data has been reset.",16,ink,false);AlertDialog error=sheet("Could not open study data",f,"Close",this::finish);error.setCancelable(false);return;
         }
-        if(state!=null) { tab=state.getString("tab","Today"); selectedSubject=state.getString("subject"); pendingChapter=state.getString("pending"); }
+        if(state!=null) { tab=state.getString("tab","Today"); selectedSubject=state.getString("subject"); pendingChapter=state.getString("pending");pendingExportNote=state.getString("exportNote"); }
         show();
         if(state!=null){String id=state.getString("reader");JSONObject n=id==null?null:store.find("notes",id);if(n!=null)readFile(n);}
     }
     @Override public void onSaveInstanceState(Bundle state) {
-        super.onSaveInstanceState(state); state.putString("tab",tab); state.putString("subject",selectedSubject); state.putString("pending",pendingChapter);if(reading)state.putString("reader",readerNoteId);
+        super.onSaveInstanceState(state); state.putString("tab",tab); state.putString("subject",selectedSubject); state.putString("pending",pendingChapter);state.putString("exportNote",pendingExportNote);if(reading)state.putString("reader",readerNoteId);
     }
     private int dp(float n) { return Math.round(n*getResources().getDisplayMetrics().density); }
     private void colors() {
-        String theme=store.root.optString("theme","Midnight"); boolean light=theme.equals("Paper");
-        bg=Color.parseColor(light?"#F4F6F2":theme.equals("AMOLED")?"#000000":"#0B1220");
-        card=Color.parseColor(light?"#FFFFFF":"#152132");
-        ink=Color.parseColor(light?"#172B2B":"#F0F5F4");
-        muted=Color.parseColor(light?"#526567":"#A5B4C5");
-        line=Color.parseColor(light?"#DFE6E1":"#2B3C50");
-        accent=Color.parseColor(light?"#236C57":"#A6E8CD");
+        String theme=store==null?"Minimal":store.root.optString("theme","Midnight");minimal=theme.startsWith("Minimal");lightTheme=theme.equals("Paper")||theme.equals("Minimal");
+        bg=Color.parseColor(lightTheme?(minimal?"#FAF9FC":"#F4F6F2"):theme.equals("AMOLED")?"#000000":minimal?"#111116":"#0B1220");
+        card=Color.parseColor(lightTheme?"#FFFFFF":minimal?"#1B1B23":"#152132");ink=Color.parseColor(lightTheme?"#20212A":"#F2F1F7");muted=Color.parseColor(lightTheme?"#636371":"#B3B2C3");line=Color.parseColor(lightTheme?"#E3E1EB":"#363540");
+        int seed=Color.parseColor(minimal?"#A374EC":lightTheme?"#236C57":"#A6E8CD");
+        if(store!=null){String mode=store.root.optString("accentMode","Theme");if(mode.equals("Custom"))try{seed=Color.parseColor(store.root.optString("customAccent","#A374EC"));}catch(Exception ignored){}
+            if(mode.equals("Android")&&Build.VERSION.SDK_INT>=31)seed=getColor(lightTheme?android.R.color.system_accent1_600:android.R.color.system_accent1_200);}
+        accent=ThemeColors.readable(seed,bg,card);onAccent=ThemeColors.on(accent);
     }
+    @Override protected void onResume(){super.onResume();if(store!=null&&root!=null&&store.root.optString("accentMode").equals("Android")){int before=accent;colors();if(before!=accent){String id=readerNoteId;show();JSONObject n=id==null?null:store.find("notes",id);if(n!=null)readFile(n);}}}
     private GradientDrawable shape(int color,int radius) {
         GradientDrawable g=new GradientDrawable(); g.setColor(color); g.setCornerRadius(dp(radius)); return g;
     }
@@ -73,12 +75,12 @@ public class MainActivity extends Activity {
     private void gap(LinearLayout target,int h) { View v=new View(this); target.addView(v,new LinearLayout.LayoutParams(1,dp(h))); }
     private void label(LinearLayout target,String value,int size,int color,boolean bold) { target.addView(text(value,size,color,bold)); }
     private TextView button(String title,boolean primary,Runnable action) {
-        TextView t=text(title,14,primary?bg:ink,true); t.setGravity(Gravity.CENTER); t.setMinHeight(dp(50)); t.setPadding(dp(14),dp(12),dp(14),dp(12));
+        TextView t=text(title,14,primary?onAccent:ink,true); t.setGravity(Gravity.CENTER); t.setMinHeight(dp(50)); t.setPadding(dp(14),dp(12),dp(14),dp(12));
         t.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33808080),shape(primary?accent:card,16),null));
         t.setOnClickListener(v->action.run());t.setStateListAnimator(pressAnimator());t.setFocusable(true);return t;
     }
     private android.animation.StateListAnimator pressAnimator() {
-        android.animation.StateListAnimator states=new android.animation.StateListAnimator();if(store.root.optBoolean("reduceMotion"))return states;
+        android.animation.StateListAnimator states=new android.animation.StateListAnimator();if((store!=null&&store.root.optBoolean("reduceMotion")))return states;
         android.animation.AnimatorSet pressed=new android.animation.AnimatorSet();pressed.playTogether(android.animation.ObjectAnimator.ofFloat(null,"scaleX",.97f),android.animation.ObjectAnimator.ofFloat(null,"scaleY",.97f));pressed.setDuration(100);
         android.animation.AnimatorSet rest=new android.animation.AnimatorSet();rest.playTogether(android.animation.ObjectAnimator.ofFloat(null,"scaleX",1f),android.animation.ObjectAnimator.ofFloat(null,"scaleY",1f));rest.setDuration(160);
         states.addState(new int[]{android.R.attr.state_pressed},pressed);states.addState(new int[]{},rest);return states;
@@ -86,14 +88,14 @@ public class MainActivity extends Activity {
     private void button(LinearLayout target,String title,boolean primary,Runnable action) { gap(target,10); target.addView(button(title,primary,action)); }
     private LinearLayout panel(LinearLayout target) {
         LinearLayout p=column(); p.setPadding(dp(20),dp(20),dp(20),dp(20));
-        GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{card,bg});g.setCornerRadius(dp(24));g.setStroke(dp(1),line);p.setBackground(g);p.setElevation(dp(2));
+        GradientDrawable g=minimal?shape(card,20):new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{card,bg});g.setCornerRadius(dp(minimal?20:24));g.setStroke(dp(1),line);p.setBackground(g);p.setElevation(dp(minimal?0:2));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=dp(14); target.addView(p,lp); return p;
     }
     private void show() {
         reading=false;readerNoteId=null; renderToken++; colors();
         if(displayedBitmap!=null){displayedBitmap.recycle();displayedBitmap=null;}
         getWindow().setStatusBarColor(bg); getWindow().setNavigationBarColor(bg);
-        getWindow().getDecorView().setSystemUiVisibility(store.root.optString("theme").equals("Paper")?View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0);
+        getWindow().getDecorView().setSystemUiVisibility(lightTheme?View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0);
         root=column(); root.setBackgroundColor(bg); root.setFitsSystemWindows(true); setContentView(root);
         root.setOnApplyWindowInsetsListener((v,insets)->{
             v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());
@@ -106,18 +108,18 @@ public class MainActivity extends Activity {
         LinearLayout top=new LinearLayout(this); top.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("STUDYFLOW",12,accent,true); brand.setLetterSpacing(.2f); top.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
         top.addView(iconButton("settings","Settings",()->{tab="Settings";show();})); body.addView(top); gap(body,22);
-        if(tab.equals("Today")) today(); else if(tab.equals("Library")) library(); else if(tab.equals("Plan")) plan(); else settings();
+        if(tab.equals("Today")) today(); else if(tab.equals("Library")) library(); else if(tab.equals("Plan")) plan();else if(tab.equals("Appearance"))appearance();else if(tab.equals("Insights"))insights();else settings();
         nav=new LinearLayout(this); nav.setPadding(dp(14),dp(10),dp(14),dp(10)); nav.setBackgroundColor(bg);
         for(String item:new String[]{"Today","Library","Plan"}) {
             TextView b=button(item,tab.equals(item),()->{tab=item;selectedSubject=null;show();});
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1); lp.setMargins(dp(3),0,dp(3),0); nav.addView(b,lp);
         }
         root.addView(nav);
-        if(!store.root.optBoolean("reduceMotion")) { body.setAlpha(0); body.setTranslationY(dp(9)); body.animate().alpha(1).translationY(0).setDuration(220).setInterpolator(new DecelerateInterpolator()).start(); }
+        if(!(store!=null&&store.root.optBoolean("reduceMotion"))) { body.setAlpha(0); body.setTranslationY(dp(9)); body.animate().alpha(1).translationY(0).setDuration(220).setInterpolator(new DecelerateInterpolator()).start(); }
     }
     private void title(String eyebrow,String title,String subtitle) {
         label(body,eyebrow.toUpperCase(Locale.ROOT),11,accent,true); gap(body,8);
-        label(body,title,32,ink,true); gap(body,8); label(body,subtitle,14,muted,false); gap(body,24);
+        label(body,minimal?title.replace("\n"," "):title,minimal?28:32,ink,true); gap(body,8); label(body,subtitle,14,muted,false); gap(body,24);
     }
     private void today() {
         title(LocalDate.now().format(shortDate),"Make room\nfor progress.","Your notes. Your pace. A clearer next step.");
@@ -135,7 +137,8 @@ public class MainActivity extends Activity {
             label(body,"Add an exam date, break the syllabus into chapters, then attach your notes. Your daily plan will appear here.",15,muted,false);
             return;
         }
-        button(hero,"Adjust today's time",false,()->budget(true));
+        button(hero,"Adjust today's time",false,()->budget(true));button(hero,"Study insights  →",false,()->{tab="Insights";show();});
+        recentDocuments();
         if(p.unscheduledMinutes>0) warning(p.unscheduledMinutes+" minutes do not fit before your exams. Adjust time, chapter estimates, or exam dates in Library.");
         label(body,"Your next steps",21,ink,true); gap(body,14);
         int count=0;
@@ -156,14 +159,15 @@ public class MainActivity extends Activity {
         if(selectedSubject!=null && store.find("subjects",selectedSubject)!=null) { subjectDetail();return; }
         title("Your workspace","Everything,\nin its place.","Subjects, chapters and notes. Saved on this device.");
         button(body,"Add subject  +",true,()->subjectForm(null)); gap(body,20);
-        JSONArray a=store.array("subjects");
+        recentDocuments();
+        JSONArray a=store.array("subjects");List<JSONObject> ordered=new ArrayList<>();for(int i=0;i<a.length();i++)ordered.add(a.optJSONObject(i));ordered.sort((x,y)->Boolean.compare(y.optBoolean("pinned"),x.optBoolean("pinned")));
         if(a.length()==0) label(body,"Your library is ready for its first subject.",16,muted,false);
         for(int i=0;i<a.length();i++) {
-            JSONObject s=a.optJSONObject(i); int total=0,done=0;
+            JSONObject s=ordered.get(i); int total=0,done=0;
             JSONArray cs=store.array("chapters"); for(int j=0;j<cs.length();j++) { JSONObject c=cs.optJSONObject(j); if(c.optString("subject").equals(s.optString("id"))) {total++;if(c.optInt("remaining")==0)done++;} }
             LinearLayout p=panel(body); label(p,"EXAM · "+LocalDate.parse(s.optString("exam")).format(shortDate),11,accent,true);gap(p,10);
-            label(p,s.optString("name"),23,ink,true); gap(p,6); label(p,done+" / "+total+" chapters studied",13,muted,false);
-            button(p,"Open subject  →",false,()->{selectedSubject=s.optString("id");show();});
+            label(p,(s.optBoolean("pinned")?"★  ":"")+s.optString("name"),23,ink,true); gap(p,6); label(p,done+" / "+total+" chapters studied",13,muted,false);
+            button(p,"Open subject  →",false,()->{selectedSubject=s.optString("id");show();});button(p,s.optBoolean("pinned")?"Unpin subject":"Pin to top",false,()->{try{s.put("pinned",!s.optBoolean("pinned"));}catch(JSONException ignored){}saveAndShow();});
         }
     }
     private void subjectDetail() {
@@ -179,17 +183,16 @@ public class MainActivity extends Activity {
             button(p,"Open notes",true,()->notes(c));button(p,"Focus on this chapter",false,()->focus(c,25)); button(p,"Edit chapter / add revision",false,()->chapterForm(c));
         }
         if(count==0) label(body,"Add chapters with estimated study minutes to generate your plan.",15,muted,false);
-        button(body,"Delete subject",false,()->new AlertDialog.Builder(this).setTitle("Delete this subject?").setMessage("Its chapters and attached notes will also be deleted from this app.")
-            .setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{
+        button(body,"Delete subject",false,()->confirm("Delete subject?","Its chapters and attached notes will also be deleted from this app.","Delete","Keep",()->{
                 JSONArray cs=store.array("chapters");for(int i=cs.length()-1;i>=0;i--)if(cs.optJSONObject(i).optString("subject").equals(selectedSubject))deleteChapter(cs.optJSONObject(i).optString("id"));
                 store.remove("subjects","id",selectedSubject);selectedSubject=null;saveAndShow();
-            }).show());
+            }));
     }
-    private ArrayAdapter<String> confidenceAdapter() {
-        return new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Need help","Okay","Confident"}) {
-            @Override public View getView(int p,View v,ViewGroup parent) { TextView t=(TextView)super.getView(p,v,parent);t.setTextColor(ink);t.setBackgroundColor(card);return t; }
-            @Override public View getDropDownView(int p,View v,ViewGroup parent) { TextView t=(TextView)super.getDropDownView(p,v,parent);t.setTextColor(ink);t.setBackgroundColor(card);t.setMinHeight(dp(48));return t; }
-        };
+    private final class Choice extends TextView {
+        int selected;
+        Choice(){super(MainActivity.this);setTextSize(16);setTextColor(ink);setPadding(dp(16),dp(16),dp(16),dp(16));setBackground(inputBackground(false));setMinHeight(dp(54));setSelection(0);setOnClickListener(v->{LinearLayout f=form();final AlertDialog[] d={null};for(int i=0;i<3;i++){final int n=i;button(f,confidence(i)+(i==selected?"  ✓":""),i==selected,()->{setSelection(n);d[0].dismiss();});}d[0]=sheet("Your confidence",f,"Close",null);});}
+        int getSelectedItemPosition(){return selected;}
+        void setSelection(int n){selected=Math.max(0,Math.min(2,n));setText(confidence(selected)+"   ⌄");setContentDescription("Confidence: "+confidence(selected));}
     }
     private String confidence(int n) { return new String[]{"Need help","Okay","Confident"}[Math.max(0,Math.min(2,n))]; }
     private LinearLayout form() { LinearLayout f=column();f.setPadding(dp(20),dp(8),dp(20),dp(16));return f; }
@@ -203,17 +206,18 @@ public class MainActivity extends Activity {
         GradientDrawable g=shape(bg,16);g.setStroke(dp(focused?2:1),focused?accent:line);return g;
     }
     private void entrance(View v) {
-        if(store.root.optBoolean("reduceMotion"))return;
+        if((store!=null&&store.root.optBoolean("reduceMotion")))return;
         v.setAlpha(0);v.setTranslationY(dp(12));v.animate().alpha(1).translationY(0).setDuration(260).setInterpolator(new DecelerateInterpolator()).start();
     }
-    private AlertDialog sheet(String title,LinearLayout f,String positive,Runnable save) {
+    private AlertDialog sheet(String title,LinearLayout f,String positive,Runnable save) {return sheet(title,f,positive,save,"Cancel");}
+    private AlertDialog sheet(String title,LinearLayout f,String positive,Runnable save,String cancelLabel) {
         LinearLayout shell=column();GradientDrawable surface=shape(card,28);surface.setStroke(dp(1),line);shell.setBackground(surface);shell.setPadding(0,dp(22),0,dp(16));
         TextView heading=text(title,24,ink,true);heading.setPadding(dp(22),0,dp(22),dp(16));shell.addView(heading);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.addView(f);
         shell.addView(scroll,new LinearLayout.LayoutParams(-1,-2,1));
         LinearLayout actions=new LinearLayout(this);actions.setPadding(dp(16),dp(12),dp(16),0);shell.addView(actions);
         AlertDialog d=new AlertDialog.Builder(this).create();d.setView(shell,0,0,0,0);
-        if(save!=null) {TextView cancel=button("Cancel",false,d::dismiss);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(0,0,dp(8),0);actions.addView(cancel,lp);}
+        if(save!=null) {TextView cancel=button(cancelLabel,false,d::dismiss);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(0,0,dp(8),0);actions.addView(cancel,lp);}
         TextView confirm=button(positive,true,()->{try{if(save!=null)save.run();d.dismiss();}catch(IllegalArgumentException ex){toast(ex.getMessage());}});
         actions.addView(confirm,new LinearLayout.LayoutParams(0,-2,1));
         d.setOnShowListener(v->{Window w=d.getWindow();if(w!=null){w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));w.setDimAmount(.65f);w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
@@ -226,6 +230,7 @@ public class MainActivity extends Activity {
         EditText e=new EditText(this);e.setHint(numeric?"Enter a number":hint);e.setText(value);e.setSingleLine(true);
         if(numeric)e.setInputType(InputType.TYPE_CLASS_NUMBER);styleInput(e);f.addView(e,new LinearLayout.LayoutParams(-1,-2));gap(f,16);return e;
     }
+    private void confirm(String title,String message,String positive,String keep,Runnable action) {LinearLayout f=form();label(f,message,16,muted,false);gap(f,10);sheet(title,f,positive,action,keep);}
     private AlertDialog formDialog(String title,LinearLayout f,String positive,Runnable save) { return sheet(title,f,positive,save); }
     private int number(EditText e,int min,int max) {
         try { int n=Integer.parseInt(e.getText().toString().trim());if(n<min||n>max)throw new Exception();return n; }
@@ -236,7 +241,7 @@ public class MainActivity extends Activity {
         LinearLayout f=form();EditText name=field(f,"Subject name",existing==null?"":existing.optString("name"),false);
         final LocalDate[] date={existing==null?LocalDate.now().plusDays(14):LocalDate.parse(existing.optString("exam"))};
         TextView dateButton=button("Exam: "+date[0].format(shortDate),false,()->{});
-        dateButton.setOnClickListener(v->new DatePickerDialog(this,(p,y,m,d)->{date[0]=LocalDate.of(y,m+1,d);dateButton.setText("Exam: "+date[0].format(shortDate));},date[0].getYear(),date[0].getMonthValue()-1,date[0].getDayOfMonth()).show());f.addView(dateButton);
+        dateButton.setOnClickListener(v->{LinearLayout dates=form();EditText input=field(dates,"Exam date · YYYY-MM-DD",date[0].toString(),false);formDialog("Choose exam date",dates,"Use date",()->{try{LocalDate parsed=LocalDate.parse(input.getText().toString().trim());if(!parsed.isAfter(LocalDate.now())||parsed.isAfter(LocalDate.now().plusDays(730)))throw new Exception();date[0]=parsed;dateButton.setText("Exam: "+parsed.format(shortDate));}catch(Exception ex){throw new IllegalArgumentException("Enter a date from tomorrow to two years ahead, such as "+LocalDate.now().plusDays(14)+".");}});});f.addView(dateButton);
         formDialog(existing==null?"New subject":"Edit subject",f,"Save",()->{
             String n=required(name);if(!date[0].isAfter(LocalDate.now())||date[0].isAfter(LocalDate.now().plusDays(730)))throw new IllegalArgumentException("Choose an exam date from tomorrow to two years ahead.");
             if(existing==null)store.array("subjects").put(Store.object("id",Store.id(),"name",n,"exam",date[0].toString()));
@@ -247,10 +252,10 @@ public class MainActivity extends Activity {
     private void chapterForm(JSONObject existing) {
         LinearLayout f=form();EditText name=field(f,"Chapter name",existing==null?"":existing.optString("name"),false);
         EditText mins=field(f,"Minutes remaining (include revision)",existing==null?"60":existing.optString("remaining"),true);
-        label(f,"Confidence",13,muted,false);Spinner confidence=new Spinner(this);
-        confidence.setAdapter(confidenceAdapter());
+        label(f,"Confidence",13,muted,false);Choice confidence=new Choice();
+
         confidence.setSelection(existing==null?0:existing.optInt("confidence"));f.addView(confidence);
-        if(existing!=null)button(f,"Delete chapter",false,()->new AlertDialog.Builder(this).setTitle("Delete chapter and notes?").setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{deleteChapter(existing.optString("id"));saveAndShow();}).show());
+        if(existing!=null)button(f,"Delete chapter",false,()->confirm("Delete chapter?","Attached notes will also be removed.","Delete","Keep",()->{deleteChapter(existing.optString("id"));saveAndShow();}));
         formDialog(existing==null?"New chapter":"Edit chapter",f,"Save",()->{
             String n=required(name);int m=number(mins,0,10000);
             if(existing!=null && store.find("chapters",existing.optString("id"))==null) throw new IllegalArgumentException("This chapter has been deleted. Close this form.");
@@ -304,13 +309,15 @@ public class MainActivity extends Activity {
             LinearLayout p=panel(f);rows.add(p);searchable.add((n.optString("name")+" "+n.optString("content")).toLowerCase(Locale.ROOT));label(p,n.optString("name"),17,ink,true);
             label(p,n.optString("type").equals("text")?"Written note":"Offline attachment · page "+n.optInt("page",1),12,muted,false);
             button(p,"Open",true,()->{dialog[0].dismiss();if(n.optString("type").equals("text"))editNote(chapter,n);else readFile(n);});
-            button(p,"Delete note",false,()->new AlertDialog.Builder(this).setTitle("Delete this note?").setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{deleteAttachment(n);store.remove("notes","id",n.optString("id"));save();dialog[0].dismiss();notes(chapter);}).show());
+            if(n.optString("type").equals("text"))button(p,"Export as text",false,()->{dialog[0].dismiss();exportNote(n);});
+            button(p,"Delete note",false,()->confirm("Delete note?","This removes the copy saved in StudyFlow.","Delete","Keep",()->{deleteAttachment(n);store.remove("notes","id",n.optString("id"));save();dialog[0].dismiss();notes(chapter);}));
         }
         TextView empty=text(count==0?"No notes attached yet.":"No matching notes.",14,muted,false);empty.setVisibility(count==0?View.VISIBLE:View.GONE);f.addView(empty);
         search.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int n){}public void onTextChanged(CharSequence s,int st,int before,int count){String q=s.toString().toLowerCase(Locale.ROOT).trim();int visible=0;for(int i=0;i<rows.size();i++){boolean match=searchable.get(i).contains(q);rows.get(i).setVisibility(match?View.VISIBLE:View.GONE);if(match)visible++;}empty.setVisibility(visible==0?View.VISIBLE:View.GONE);}public void afterTextChanged(android.text.Editable e){}});
         dialog[0]=sheet(chapter.optString("name"),f,"Close",null);
     }
     private void editNote(JSONObject chapter,JSONObject note) {
+        if(note!=null){try{note.put("lastOpened",System.currentTimeMillis());}catch(JSONException ignored){}save();}
         LinearLayout f=form();EditText name=field(f,"Note title",note==null?"":note.optString("name"),false);
         EditText content=new EditText(this);styleInput(content);content.setHint("Write a summary, key points, or questions…");content.setText(note==null?"":note.optString("content"));content.setMinLines(6);content.setMaxLines(12);content.setGravity(Gravity.TOP);content.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);f.addView(content);
         formDialog("Written note",f,"Save",()->{
@@ -326,7 +333,9 @@ public class MainActivity extends Activity {
         });
     }
     @Override protected void onActivityResult(int request,int result,Intent data) {
-        super.onActivityResult(request,result,data);if(request!=IMPORT||result!=RESULT_OK||data==null||data.getData()==null)return;
+        super.onActivityResult(request,result,data);
+        if(request==EXPORT_NOTE){if(result!=RESULT_OK||data==null||data.getData()==null)return;JSONObject note=store.find("notes",pendingExportNote);pendingExportNote=null;if(note==null){toast("This note is no longer available.");return;}Uri destination=data.getData();String content=note.optString("name")+"\n\n"+note.optString("content");worker.execute(()->{try(OutputStream out=getContentResolver().openOutputStream(destination,"wt")){if(out==null)throw new IOException();out.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));runOnUiThread(()->toast("Note exported."));}catch(Exception e){runOnUiThread(()->toast("Could not export the note. Choose another location."));}});return;}
+        if(request!=IMPORT||result!=RESULT_OK||data==null||data.getData()==null)return;
         Uri uri=data.getData();String chapterId=pendingChapter;
         if(chapterId==null||store.find("chapters",chapterId)==null){toast("Choose a chapter and import again.");return;}
         String mime=getContentResolver().getType(uri);if(mime==null)mime="application/octet-stream";
@@ -350,6 +359,7 @@ public class MainActivity extends Activity {
     private void readFile(JSONObject note) {
         if(store.find("notes",note.optString("id"))==null){toast("This note was deleted.");return;}
         File file=new File(getFilesDir(),note.optString("file"));if(!file.exists()){toast("Attachment unavailable. Please import it again.");return;}
+        try{note.put("lastOpened",System.currentTimeMillis());}catch(JSONException ignored){}save();
         reading=true;readerNoteId=note.optString("id");renderToken++;root.removeAllViews();
         LinearLayout reader=column();reader.setPadding(dp(16),dp(8),dp(16),dp(8));root.addView(reader,new LinearLayout.LayoutParams(-1,-1));
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);reader.addView(header);
@@ -358,7 +368,7 @@ public class MainActivity extends Activity {
         TextView status=text("Loading…",12,muted,false);status.setPadding(0,dp(10),0,dp(10));reader.addView(status);
         PageScroll sc=new PageScroll();sc.setFillViewport(true);sc.setClipToPadding(false);reader.addView(sc,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout content=column();sc.addView(content,new ScrollView.LayoutParams(-1,-2));
-        ImageView image=new ImageView(this);image.setAdjustViewBounds(true);image.setContentDescription("Page of "+note.optString("name"));content.addView(image,new LinearLayout.LayoutParams(-1,-2));
+        ZoomImageView image=new ZoomImageView(this);sc.raster=image;image.setAdjustViewBounds(true);sc.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{if(b-t>0&&b-t!=ob-ot)image.setMaxHeight(b-t);});image.setContentDescription("Page of "+note.optString("name"));content.addView(image,new LinearLayout.LayoutParams(-1,-2));
         TextView prose=text("",store.root.optInt("readerTextSize",18),ink,false);prose.setPadding(dp(18),dp(18),dp(18),dp(18));prose.setTextIsSelectable(true);sc.selectable=prose;prose.setLineSpacing(dp(7),1);prose.setBackground(shape(card,20));prose.setVisibility(View.GONE);content.addView(prose,new LinearLayout.LayoutParams(-1,-2));
         String type=note.optString("type"),name=note.optString("name");
         boolean pdf=type.equals("application/pdf")||DocumentText.extension(name).equals("pdf");
@@ -410,6 +420,7 @@ public class MainActivity extends Activity {
                 button(f,"Go to "+(isText?"section":"page"),true,()->{menu[0].dismiss();LinearLayout jump=form();EditText input=field(jump,"Number · 1 to "+count[0],String.valueOf(page[0]+1),true);formDialog("Jump to position",jump,"Open",()->{page[0]=number(input,1,count[0])-1;render[0].run();});});
                 button(f,bookmarked(note,page[0]+1)?"★ Remove bookmark":"☆ Bookmark this position",false,()->{toggleBookmark(note,page[0]+1);status.setText((isText?"Text section ":"Page ")+(page[0]+1)+" / "+count[0]+"  ·  "+(bookmarked(note,page[0]+1)?"★ Saved":"Swipe to turn"));menu[0].dismiss();});
                 JSONArray marks=note.optJSONArray("bookmarks");if(marks!=null&&marks.length()>0)button(f,"Saved bookmarks ("+marks.length()+")",false,()->{menu[0].dismiss();LinearLayout list=form();final AlertDialog[] bookmarks={null};for(int i=0;i<marks.length();i++){final int at=marks.optInt(i);if(at>0&&at<=count[0])button(list,"★  "+(isText?"Section ":"Page ")+at,false,()->{page[0]=at-1;render[0].run();bookmarks[0].dismiss();});}bookmarks[0]=sheet("Bookmarks",list,"Close",null);});
+                if(!isText){label(f,"Pinch or double-tap to zoom. Drag to pan; reset zoom to swipe pages.",13,muted,false);button(f,"Zoom in +",false,()->{image.zoomBy(1.5f);menu[0].dismiss();});button(f,"Zoom out −",false,()->{image.zoomBy(1/1.5f);menu[0].dismiss();});button(f,"Fit page",false,()->{image.resetZoom();menu[0].dismiss();});}
                 if(isText) {
                     button(f,"Find in document",false,()->{menu[0].dismiss();LinearLayout search=form();EditText input=field(search,"Find text",query[0],false);formDialog("Find in document",search,"Find next section",()->{String q=required(input);int found=-1;int start=q.equals(query[0])?page[0]+1:page[0];for(int offset=0;offset<count[0];offset++){int at=(start+offset)%count[0];if(document[0].pages.get(at).toLowerCase(Locale.ROOT).contains(q.toLowerCase(Locale.ROOT))){found=at;break;}}if(found<0)throw new IllegalArgumentException("No matches found.");query[0]=q;page[0]=found;render[0].run();});});
                     button(f,"Text size",false,()->{menu[0].dismiss();LinearLayout size=form();EditText input=field(size,"Text size (14–28)",String.valueOf(store.root.optInt("readerTextSize",18)),true);formDialog("Reading comfort",size,"Apply",()->{int n=number(input,14,28);store.setting("readerTextSize",n);save();prose.setTextSize(n);});});
@@ -432,12 +443,12 @@ public class MainActivity extends Activity {
         for(int i=0;i<a.length();i++)if(a.optInt(i)==page){a.remove(i);save();return;}a.put(page);save();
     }
     private final class PageScroll extends ScrollView {
-        TextView selectable;Runnable previous=()->{},next=()->{};float x,y;long down;boolean top,bottom,multi;
+        TextView selectable;ZoomImageView raster;Runnable previous=()->{},next=()->{};float x,y;long down;boolean top,bottom,multi;
         PageScroll(){super(MainActivity.this);}
         @Override public boolean dispatchTouchEvent(MotionEvent event) {
             if(event.getActionMasked()==MotionEvent.ACTION_DOWN){x=event.getX();y=event.getY();down=event.getEventTime();top=!canScrollVertically(-1);bottom=!canScrollVertically(1);multi=false;}
             if(event.getPointerCount()>1)multi=true;
-            if(event.getActionMasked()==MotionEvent.ACTION_UP&&!multi&&(selectable==null||!selectable.hasSelection())&&event.getEventTime()-down<650){
+            if(event.getActionMasked()==MotionEvent.ACTION_UP&&!multi&&(raster==null||!raster.isZoomed())&&(selectable==null||!selectable.hasSelection())&&event.getEventTime()-down<650){
                 float dx=event.getX()-x,dy=event.getY()-y;
                 boolean horizontal=Math.abs(dx)>dp(72)&&Math.abs(dx)>Math.abs(dy)*1.6f;
                 boolean edge=Math.abs(dy)>dp(100)&&Math.abs(dy)>Math.abs(dx)*2&&((dy<0&&bottom)||(dy>0&&top));
@@ -467,7 +478,7 @@ public class MainActivity extends Activity {
     }
     private void logProgress(Planner.Session s) {
         LinearLayout f=form();EditText minutes=field(f,"Minutes actually studied","",true);
-        label(f,"How well do you understand this chapter?",14,muted,false);Spinner confidence=new Spinner(this);confidence.setAdapter(confidenceAdapter());f.addView(confidence);
+        label(f,"How well do you understand this chapter?",14,muted,false);Choice confidence=new Choice();f.addView(confidence);
         CheckBox complete=new CheckBox(this);complete.setTextColor(ink);complete.setButtonTintList(ColorStateList.valueOf(accent));complete.setText("I have finished this chapter's planned work");f.addView(complete);
         formDialog("Save your progress",f,"Save progress",()->{
             JSONObject c=store.find("chapters",s.topic.id);if(c==null)throw new IllegalArgumentException("This chapter no longer exists.");int actual=number(minutes,1,720);
@@ -477,18 +488,58 @@ public class MainActivity extends Activity {
     }
     private void settings() {
         title("Make it yours","Quietly powerful.","A focused workspace, tuned to your preferences.");
-        LinearLayout appearance=panel(body);label(appearance,"Appearance",21,ink,true);
-        for(String theme:new String[]{"Midnight","Paper","AMOLED"})button(appearance,theme+(store.root.optString("theme","Midnight").equals(theme)?"  ✓":""),false,()->{store.setting("theme",theme);saveAndShow();});
-        button(appearance,store.root.optBoolean("reduceMotion")?"Animations: reduced":"Animations: enabled",false,()->{store.setting("reduceMotion",!store.root.optBoolean("reduceMotion"));saveAndShow();});
-        LinearLayout rhythm=panel(body);label(rhythm,"Study rhythm",21,ink,true);button(rhythm,"Weekly availability",false,()->budget(false));
+        LinearLayout appearance=panel(body);label(appearance,"Appearance",21,ink,true);gap(appearance,8);label(appearance,store.root.optString("theme","Midnight")+" · "+store.root.optString("accentMode","Theme")+" colors",14,muted,false);
+        button(appearance,"Theme & accent colors  →",false,()->{tab="Appearance";show();});
+        LinearLayout rhythm=panel(body);label(rhythm,"Study rhythm",21,ink,true);button(rhythm,"Weekly availability",false,()->budget(false));button(rhythm,"Study insights",false,()->{tab="Insights";show();});
         LinearLayout privacy=panel(body);label(privacy,"Your space stays yours",20,ink,true);gap(privacy,8);label(privacy,"No account, ads, analytics or internet permission. Notes are copied into private app storage. Uninstalling removes your data; keep your original files.",14,muted,false);
         LinearLayout follow=panel(body);label(follow,"Follow",21,ink,true);gap(follow,6);label(follow,"Connect with the creator",13,muted,false);gap(follow,16);
         LinearLayout socials=new LinearLayout(this);socials.setGravity(Gravity.CENTER);follow.addView(socials);
         socials.addView(iconButton("instagram","Instagram · __nshd.__",()->openLink("https://www.instagram.com/__nshd.__?stkn=emExd3hxZndzN21o")));
         View spacer=new View(this);socials.addView(spacer,new LinearLayout.LayoutParams(dp(20),1));
         socials.addView(iconButton("whatsapp","WhatsApp · N S H D",()->openLink("https://wa.me/918590455801")));
-        gap(body,12);label(body,"STUDYFLOW  /  0.2.0",12,accent,true);gap(body,6);label(body,"Flow edition · documents, focus and planning",13,muted,false);
+        gap(body,12);label(body,"STUDYFLOW  /  0.3.0",12,accent,true);gap(body,6);label(body,"Minimal edition · your space, your colors",13,muted,false);
         gap(body,26);TextView credit=text("MADE  BY  N S H D",12,muted,true);credit.setLetterSpacing(.16f);credit.setGravity(Gravity.CENTER);body.addView(credit);gap(body,12);
+    }
+    private void appearance() {
+        button(body,"← Settings",false,()->{tab="Settings";show();});gap(body,20);
+        title("Appearance","A space that feels like you.","Choose the surface. Set the color. Keep your focus.");
+        LinearLayout preview=panel(body);label(preview,"LIVE PREVIEW",11,accent,true);gap(preview,12);label(preview,"Less noise. More clarity.",23,ink,true);gap(preview,8);label(preview,"Your subjects, notes and progress in one calm workspace.",14,muted,false);
+        button(preview,"This is your accent",true,()->toast("Changes apply across StudyFlow."));
+        label(body,"Theme",20,ink,true);gap(body,12);
+        String[] themes={"Minimal","Minimal Dark","Paper","Midnight","AMOLED"};
+        for(String name:themes){LinearLayout p=panel(body);boolean selected=store.root.optString("theme","Midnight").equals(name);label(p,name+(selected?"  ✓":""),18,ink,true);gap(p,5);label(p,name.equals("Minimal")?"Soft white · lavender · fine outlines":name.equals("Minimal Dark")?"Charcoal · quiet contrast":name.equals("AMOLED")?"True black background":name.equals("Paper")?"Warm white workspace":"Deep blue surfaces",13,muted,false);button(p,selected?"Selected":"Use "+name,selected,()->{store.setting("theme",name);saveAndShow();});}
+        LinearLayout palette=panel(body);label(palette,"Accent color",20,ink,true);gap(palette,8);label(palette,"Text and controls adjust the shade for readable contrast.",13,muted,false);
+        button(palette,"Theme default"+(store.root.optString("accentMode","Theme").equals("Theme")?"  ✓":""),false,()->{store.setting("accentMode","Theme");saveAndShow();});
+        String[] colors={"#A374EC","#4263EB","#00866A","#D45B35","#C0447C","#756047","#16858F","#555555"};
+        String[] names={"Lavender","Blue","Jade","Terracotta","Rose","Sand","Teal","Graphite"};
+        for(int row=0;row<2;row++){LinearLayout swatches=new LinearLayout(this);gap(palette,12);palette.addView(swatches);for(int col=0;col<4;col++){int i=row*4+col;String hex=colors[i];int color=Color.parseColor(hex);TextView swatch=text(store.root.optString("customAccent").equalsIgnoreCase(hex)&&store.root.optString("accentMode").equals("Custom")?"✓":"",20,ThemeColors.on(color),true);swatch.setGravity(Gravity.CENTER);swatch.setContentDescription(names[i]+" accent");swatch.setTooltipText(names[i]);swatch.setBackground(shape(color,16));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(52),1);lp.setMargins(dp(4),0,dp(4),0);swatches.addView(swatch,lp);swatch.setOnClickListener(v->{store.setting("customAccent",hex);store.setting("accentMode","Custom");saveAndShow();});}}
+        button(palette,"Custom color · HEX",false,()->{LinearLayout f=form();EditText hex=field(f,"Hex color · #RRGGBB",store.root.optString("customAccent","#A374EC"),false);TextView chip=text("Color preview",16,ink,true);chip.setGravity(Gravity.CENTER);chip.setPadding(0,dp(20),0,dp(20));f.addView(chip);
+            Runnable refresh=()->{String value=hex.getText().toString().trim();if(value.matches("#[0-9a-fA-F]{6}")){int c=Color.parseColor(value);chip.setBackground(shape(c,16));chip.setTextColor(ThemeColors.on(c));}};refresh.run();
+            hex.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int n){}public void onTextChanged(CharSequence s,int st,int before,int count){refresh.run();}public void afterTextChanged(android.text.Editable e){}});
+            formDialog("Choose your accent",f,"Apply color",()->{String value=hex.getText().toString().trim();if(!value.matches("#[0-9a-fA-F]{6}"))throw new IllegalArgumentException("Use six hexadecimal digits, such as #A374EC.");store.setting("customAccent",value);store.setting("accentMode","Custom");saveAndShow();});});
+        LinearLayout android=panel(body);label(android,"Match Android",20,ink,true);gap(android,8);label(android,Build.VERSION.SDK_INT>=31?"Use Android's accent palette, based on the wallpaper or colors selected in your phone's system settings. Changes refresh when you return to StudyFlow.":"System wallpaper colors require Android 12 or newer. Custom colors work on this phone.",14,muted,false);
+        if(Build.VERSION.SDK_INT>=31)button(android,store.root.optString("accentMode").equals("Android")?"Following Android  ✓":"Use Android / wallpaper colors",true,()->{store.setting("accentMode","Android");saveAndShow();});
+        LinearLayout motion=panel(body);label(motion,"Motion",20,ink,true);button(motion,store.root.optBoolean("reduceMotion")?"Reduced motion  ✓":"Smooth animations  ✓",false,()->{store.setting("reduceMotion",!store.root.optBoolean("reduceMotion"));saveAndShow();});
+    }
+    private void recentDocuments() {
+        List<JSONObject> recent=new ArrayList<>();JSONArray notes=store.array("notes");for(int i=0;i<notes.length();i++){JSONObject n=notes.optJSONObject(i);if(n.optLong("lastOpened")>0)recent.add(n);}
+        recent.sort((a,b)->Long.compare(b.optLong("lastOpened"),a.optLong("lastOpened")));if(recent.isEmpty())return;
+        gap(body,18);label(body,"Pick up where you left off",20,ink,true);gap(body,12);
+        for(int i=0;i<Math.min(3,recent.size());i++){JSONObject n=recent.get(i);LinearLayout p=panel(body);label(p,n.optString("name"),17,ink,true);gap(p,4);label(p,n.optString("type").equals("text")?"Written note":"Position "+n.optInt("page",1)+" saved",12,muted,false);button(p,"Continue reading  →",false,()->{JSONObject c=store.find("chapters",n.optString("chapter"));if(c==null)return;if(n.optString("type").equals("text"))editNote(c,n);else readFile(n);});}
+    }
+    private void insights() {
+        button(body,"← Today",false,()->{tab="Today";show();});gap(body,18);title("Study insights","Small steps add up.","Only minutes you actually logged appear here.");
+        LocalDate today=LocalDate.now();long total=0;int sessions=0;Map<LocalDate,Long> days=new HashMap<>();Map<String,Long> subjects=new LinkedHashMap<>();
+        JSONArray logs=store.array("logs");for(int i=0;i<logs.length();i++){JSONObject log=logs.optJSONObject(i);try{LocalDate date=LocalDate.parse(log.optString("date"));long mins=Math.max(0,log.optInt("minutes"));if(date.isAfter(today))continue;days.put(date,days.getOrDefault(date,0L)+mins);total+=mins;sessions++;JSONObject chapter=store.find("chapters",log.optString("chapter"));JSONObject subject=chapter==null?null:store.find("subjects",chapter.optString("subject"));String id=subject==null?"Removed subjects":subject.optString("name");subjects.put(id,subjects.getOrDefault(id,0L)+mins);}catch(Exception ignored){}}
+        LinearLayout hero=panel(body);label(hero,total+" minutes",32,accent,true);gap(hero,4);label(hero,sessions+" logged sessions · all time",14,muted,false);
+        if(sessions==0){label(body,"Your first logged study session starts your history.",16,muted,false);return;}
+        LinearLayout week=panel(body);label(week,"Last 7 days",20,ink,true);gap(week,14);long max=1;for(int i=0;i<7;i++)max=Math.max(max,days.getOrDefault(today.minusDays(i),0L));
+        for(int i=6;i>=0;i--){LocalDate day=today.minusDays(i);long minutes=days.getOrDefault(day,0L);label(week,day.format(DateTimeFormatter.ofPattern("EEE d",Locale.getDefault()))+"  ·  "+minutes+" min",13,muted,false);ProgressBar bar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);bar.setMax(1000);bar.setProgress((int)(minutes*1000/max));bar.setProgressTintList(ColorStateList.valueOf(accent));bar.setProgressBackgroundTintList(ColorStateList.valueOf(line));bar.setContentDescription(minutes+" minutes on "+day);week.addView(bar,new LinearLayout.LayoutParams(-1,dp(10)));gap(week,12);}
+        LinearLayout breakdown=panel(body);label(breakdown,"By subject · all time",20,ink,true);gap(breakdown,12);for(Map.Entry<String,Long> entry:subjects.entrySet()){label(breakdown,entry.getKey()+"  ·  "+entry.getValue()+" min",15,ink,false);gap(breakdown,12);}
+    }
+    private void exportNote(JSONObject note) {
+        pendingExportNote=note.optString("id");Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.setType("text/plain");i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,note.optString("name","StudyFlow note").replaceAll("[/\\\\:*?\"<>|]","_")+".txt");
+        try{startActivityForResult(i,EXPORT_NOTE);}catch(ActivityNotFoundException e){toast("No file-saving app is available on this phone.");}
     }
     private View iconButton(String symbol,String description,Runnable action) {
         ImageButton b=new ImageButton(this);b.setImageDrawable(new FlowIcon(symbol,accent));b.setContentDescription(description);b.setTooltipText(description);
@@ -517,7 +568,7 @@ public class MainActivity extends Activity {
             if(studied<60000){toast("Study for at least one minute before logging this timer.");return;}
             dialog[0].dismiss();LinearLayout log=form();
             EditText actual=field(log,"Minutes studied",String.valueOf(studied/60000),true);
-            label(log,"Confidence after studying",13,muted,false);Spinner confidence=new Spinner(this);confidence.setAdapter(confidenceAdapter());confidence.setSelection(chapter.optInt("confidence"));log.addView(confidence);
+            label(log,"Confidence after studying",13,muted,false);Choice confidence=new Choice();confidence.setSelection(chapter.optInt("confidence"));log.addView(confidence);
             formDialog("Save focused study",log,"Save progress",()->{
                 JSONObject c=store.find("chapters",chapter.optString("id"));if(c==null)throw new IllegalArgumentException("Chapter no longer exists.");
                 if(!store.root.optString("focusChapter").equals(c.optString("id")))throw new IllegalArgumentException("This session was already saved.");
@@ -527,7 +578,7 @@ public class MainActivity extends Activity {
                 if(!save()){try{store.root=new JSONObject(snapshot);}catch(JSONException ignored){}throw new IllegalArgumentException("Could not save progress. Please try again.");}show();
             });
         });
-        button(f,"Discard timer",false,()->{session.pause();new AlertDialog.Builder(this).setTitle("Discard this focus session?").setMessage("No study minutes will be logged.").setNegativeButton("Keep",null).setPositiveButton("Discard",(d,w)->{store.setting("focusChapter","");save();dialog[0].dismiss();show();}).show();});
+        button(f,"Discard timer",false,()->{session.pause();confirm("Discard focus session?","No study minutes will be logged. Keep the timer to resume later.","Discard","Keep timer",()->{store.setting("focusChapter","");save();dialog[0].dismiss();show();});});
         dialog[0]=sheet("Focus time",f,"Pause & close",null);dialog[0].setOnDismissListener(d->{session.pause();if(focusClock==session)focusClock=null;});session.update();
     }
     private final class FocusClock {
@@ -547,7 +598,7 @@ public class MainActivity extends Activity {
     private final class Ring extends View {
         private final Paint p=new Paint(3);private final float fraction;private final int percent;private float shown;private android.animation.ValueAnimator animation;
         Ring(int done,int goal){super(MainActivity.this);fraction=Math.min(1,done/(float)goal);percent=Math.round(fraction*100);setContentDescription(percent+" percent of daily study target");}
-        @Override protected void onAttachedToWindow(){super.onAttachedToWindow();if(store.root.optBoolean("reduceMotion")){shown=fraction;return;}animation=android.animation.ValueAnimator.ofFloat(0,fraction);animation.setDuration(650);animation.setInterpolator(new DecelerateInterpolator());animation.addUpdateListener(a->{shown=(float)a.getAnimatedValue();invalidate();});animation.start();}
+        @Override protected void onAttachedToWindow(){super.onAttachedToWindow();if((store!=null&&store.root.optBoolean("reduceMotion"))){shown=fraction;return;}animation=android.animation.ValueAnimator.ofFloat(0,fraction);animation.setDuration(650);animation.setInterpolator(new DecelerateInterpolator());animation.addUpdateListener(a->{shown=(float)a.getAnimatedValue();invalidate();});animation.start();}
         @Override protected void onDetachedFromWindow(){if(animation!=null)animation.cancel();super.onDetachedFromWindow();}
         @Override protected void onDraw(Canvas c){super.onDraw(c);float w=getWidth(),h=getHeight();p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(6));p.setStrokeCap(Paint.Cap.ROUND);p.setColor(line);RectF r=new RectF(dp(6),dp(6),w-dp(6),h-dp(6));c.drawArc(r,0,360,false,p);p.setColor(accent);c.drawArc(r,-90,360*shown,false,p);p.setStyle(Paint.Style.FILL);p.setTextSize(dp(18));p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextAlign(Paint.Align.CENTER);c.drawText(percent+"%",w/2,h/2-(p.ascent()+p.descent())/2,p);}
     }

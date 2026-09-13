@@ -2,7 +2,15 @@
 
 An offline Android workspace connecting chapter notes with a realistic exam plan.
 
-## Flow edition — 0.2.0
+## Minimal edition — 0.3.0
+
+- All app confirmation forms, including focus discard and deletion, now use the themed dialog engine. Confidence is a themed choice sheet; exam dates use a themed, validated YYYY-MM-DD input.
+- Dedicated Appearance screen with a live preview, Minimal and Minimal Dark themes inspired by the supplied reference, original themes, eight color presets, custom hex color with preview, reduced motion, and Android palette matching on Android 12+. Android mode reads the system accent palette; it does not read wallpaper files or require wallpaper/storage permission. System colors refresh on return to the app. Older versions retain theme/custom accents.
+- Accent shades adapt for at least 4.5:1 contrast against both surfaces and backgrounds, with contrasting button labels. 20,480 sampled combinations are tested.
+- Five additions: (1) PDF/image pinch, double-tap and toolbar zoom with panning; (2) three recently opened documents/notes on Today and Library; (3) pin subjects to the top of Library; (4) actual logged study minutes over seven days and all-time subject totals; (5) export saved written notes to UTF-8 text with Android's save picker.
+- Raster zoom enlarges the existing bounded render, so extreme zoom is not a new high-resolution PDF render. Reset to Fit page for page-swipe gestures.
+
+### Features retained from 0.2.0
 
 - Themed rounded dialogs, filled input fields, visible focus borders, compact reader toolbar, vector Settings icon, gradient panels, press animation, animated momentum ring and reduced-motion support. Custom Android Views, without Material 3.
 - Swipe left/right to change reader pages. Vertical scrolling stays inside a page; an additional upward swipe begun at its bottom goes next, and a downward swipe begun at its top goes back. Buttons and page/section jump remain available.
@@ -18,15 +26,15 @@ An offline Android workspace connecting chapter notes with a realistic exam plan
 
 ## Build from a phone
 
-Open **Actions → Build StudyFlow APK → Run workflow → main**. After the run succeeds, open its **Artifacts** section and download **StudyFlow-0.2.0-debug**. Extract the ZIP and install `app-debug.apk`. Pushes to main also trigger builds.
+Open **Actions → Build StudyFlow APK → Run workflow → main**. After the run succeeds, open its **Artifacts** section and download **StudyFlow-0.3.0-debug**. Extract the ZIP and install `app-debug.apk`. Pushes to main also trigger builds.
 
-The workflow runs scheduling invariants and document parser tests (Office/EPUB ordering, Unicode, malformed inputs, XML entity rejection and expansion limits), builds the APK, and runs Android lint using JDK 17, Gradle 8.9, and AGP 8.7.3. For a local build with Android SDK 35 and Gradle 8.9 installed, run `gradle assembleDebug lintDebug`. This repository does not yet contain a Gradle wrapper.
+The workflow runs scheduling invariants and accent-contrast tests plus document parser tests (Office/EPUB ordering, Unicode, malformed inputs, XML entity rejection and expansion limits), builds the APK, and runs Android lint using JDK 17, Gradle 8.9, and AGP 8.7.3. For a local build with Android SDK 35 and Gradle 8.9 installed, run `gradle assembleDebug lintDebug`. This repository does not yet contain a Gradle wrapper.
 
 This artifact is a debug-signed testing APK, not a production release. Fresh runners can generate different debug keys, so seamless updates between builds are not guaranteed until private release signing is configured. Do not uninstall a version containing important study data to resolve a signing mismatch: uninstallation deletes app data.
 
 ## Current boundaries
 
-- PDF highlighting, OCR, PDF search, zoom, automatic chapter mapping, backup/export, background timers, notifications and AI are not implemented yet.
+- PDF highlighting, OCR, PDF search, automatic chapter mapping, full app backup/restore, background timers, notifications and AI are not implemented yet.
 - Revision time is entered manually as remaining chapter work; confidence influences scheduling order but does not yet generate spaced repetitions.
 - Session progress is logged manually. The app never treats opening a note as completion.
 - Planning covers up to two years. The Plan screen shows the next 100 sessions for responsiveness.
