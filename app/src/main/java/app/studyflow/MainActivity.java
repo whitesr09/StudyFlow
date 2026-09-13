@@ -173,10 +173,16 @@ public class MainActivity extends Activity {
                 store.remove("subjects","id",selectedSubject);selectedSubject=null;saveAndShow();
             }).show());
     }
+    private ArrayAdapter<String> confidenceAdapter() {
+        return new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Need help","Okay","Confident"}) {
+            @Override public View getView(int p,View v,ViewGroup parent) { TextView t=(TextView)super.getView(p,v,parent);t.setTextColor(ink);t.setBackgroundColor(card);return t; }
+            @Override public View getDropDownView(int p,View v,ViewGroup parent) { TextView t=(TextView)super.getDropDownView(p,v,parent);t.setTextColor(ink);t.setBackgroundColor(card);t.setMinHeight(dp(48));return t; }
+        };
+    }
     private String confidence(int n) { return new String[]{"Need help","Okay","Confident"}[Math.max(0,Math.min(2,n))]; }
-    private LinearLayout form() { LinearLayout f=column();f.setPadding(dp(24),dp(10),dp(24),dp(10));return f; }
+    private LinearLayout form() { LinearLayout f=column();f.setBackgroundColor(card);f.setPadding(dp(24),dp(10),dp(24),dp(10));return f; }
     private EditText field(LinearLayout f,String hint,String value,boolean numeric) {
-        EditText e=new EditText(this);e.setHint(hint);e.setText(value);e.setTextSize(16);e.setSingleLine(true);
+        EditText e=new EditText(this);e.setHint(hint);e.setText(value);e.setTextSize(16);e.setTextColor(ink);e.setHintTextColor(muted);e.setBackgroundTintList(ColorStateList.valueOf(accent));e.setSingleLine(true);
         if(numeric)e.setInputType(InputType.TYPE_CLASS_NUMBER);
         label(f,hint,13,muted,false);f.addView(e);gap(f,12);return e;
     }
@@ -206,7 +212,7 @@ public class MainActivity extends Activity {
         LinearLayout f=form();EditText name=field(f,"Chapter name",existing==null?"":existing.optString("name"),false);
         EditText mins=field(f,"Minutes remaining (include revision)",existing==null?"60":existing.optString("remaining"),true);
         label(f,"Confidence",13,muted,false);Spinner confidence=new Spinner(this);
-        confidence.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Need help","Okay","Confident"}));
+        confidence.setAdapter(confidenceAdapter());
         confidence.setSelection(existing==null?0:existing.optInt("confidence"));f.addView(confidence);
         if(existing!=null)button(f,"Delete chapter",false,()->new AlertDialog.Builder(this).setTitle("Delete chapter and notes?").setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{deleteChapter(existing.optString("id"));saveAndShow();}).show());
         formDialog(existing==null?"New chapter":"Edit chapter",f,"Save",()->{
@@ -237,7 +243,7 @@ public class MainActivity extends Activity {
     private void budget(boolean today) {
         LinearLayout f=form();EditText minutes=field(f,today?"Total minutes available today":"Daily study minutes",String.valueOf(today&&store.root.optString("overrideDate").equals(LocalDate.now().toString())?store.root.optInt("todayBudget",90):store.root.optInt("daily",90)),true);
         CheckBox[] off=new CheckBox[7];
-        if(!today){label(f,"Days off (no sessions)",14,muted,false);for(int i=0;i<7;i++){off[i]=new CheckBox(this);off[i].setText(DayOfWeek.of(i+1).toString());off[i].setChecked(store.root.optBoolean("off"+(i+1)));f.addView(off[i]);}}
+        if(!today){label(f,"Days off (no sessions)",14,muted,false);for(int i=0;i<7;i++){off[i]=new CheckBox(this);off[i].setTextColor(ink);off[i].setButtonTintList(ColorStateList.valueOf(accent));off[i].setText(DayOfWeek.of(i+1).toString());off[i].setChecked(store.root.optBoolean("off"+(i+1)));f.addView(off[i]);}}
         formDialog(today?"Adjust today":"Weekly availability",f,"Update plan",()->{
             int n=number(minutes,0,720);
             if(today){store.setting("overrideDate",LocalDate.now().toString());store.setting("todayBudget",n);}
@@ -247,25 +253,26 @@ public class MainActivity extends Activity {
     }
     private void notes(JSONObject chapter) {
         final String id=chapter.optString("id");
+        final AlertDialog[] dialog={null};
         LinearLayout f=form();label(f,"Notes stay on this device. Attach a PDF/image or write your own summary.",14,muted,false);
         button(f,"Import PDF or image",true,()->{
-            pendingChapter=id;Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("*/*");i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/pdf","image/jpeg","image/png","image/webp"});i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,IMPORT);
+            if(dialog[0]!=null)dialog[0].dismiss();pendingChapter=id;Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("*/*");i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/pdf","image/jpeg","image/png","image/webp"});i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,IMPORT);
         });
-        button(f,"Write a note",false,()->editNote(chapter,null));gap(f,14);
+        button(f,"Write a note",false,()->{dialog[0].dismiss();editNote(chapter,null);});gap(f,14);
         JSONArray a=store.array("notes");int count=0;
         for(int i=0;i<a.length();i++){
             JSONObject n=a.optJSONObject(i);if(!n.optString("chapter").equals(id))continue;count++;
             LinearLayout p=panel(f);label(p,n.optString("name"),17,ink,true);
             label(p,n.optString("type").equals("text")?"Written note":"Offline attachment · page "+n.optInt("page",1),12,muted,false);
-            button(p,"Open",true,()->{if(n.optString("type").equals("text"))editNote(chapter,n);else readFile(n);});
-            button(p,"Delete note",false,()->new AlertDialog.Builder(this).setTitle("Delete this note?").setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{deleteAttachment(n);store.remove("notes","id",n.optString("id"));save();toast("Note deleted. Reopen notes to refresh the list.");}).show());
+            button(p,"Open",true,()->{dialog[0].dismiss();if(n.optString("type").equals("text"))editNote(chapter,n);else readFile(n);});
+            button(p,"Delete note",false,()->new AlertDialog.Builder(this).setTitle("Delete this note?").setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{deleteAttachment(n);store.remove("notes","id",n.optString("id"));save();dialog[0].dismiss();notes(chapter);}).show());
         }
         if(count==0)label(f,"No notes attached yet.",14,muted,false);
-        ScrollView sc=new ScrollView(this);sc.addView(f);new AlertDialog.Builder(this).setTitle(chapter.optString("name")).setView(sc).setPositiveButton("Close",null).show();
+        ScrollView sc=new ScrollView(this);sc.addView(f);dialog[0]=new AlertDialog.Builder(this).setTitle(chapter.optString("name")).setView(sc).setPositiveButton("Close",null).show();
     }
     private void editNote(JSONObject chapter,JSONObject note) {
         LinearLayout f=form();EditText name=field(f,"Note title",note==null?"":note.optString("name"),false);
-        EditText content=new EditText(this);content.setHint("Write a summary, key points, or questions…");content.setText(note==null?"":note.optString("content"));content.setMinLines(8);content.setGravity(Gravity.TOP);content.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);f.addView(content);
+        EditText content=new EditText(this);content.setTextColor(ink);content.setHintTextColor(muted);content.setBackgroundTintList(ColorStateList.valueOf(accent));content.setHint("Write a summary, key points, or questions…");content.setText(note==null?"":note.optString("content"));content.setMinLines(8);content.setGravity(Gravity.TOP);content.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);f.addView(content);
         formDialog("Written note",f,"Save",()->{
             String title=required(name);
             if(store.find("chapters",chapter.optString("id"))==null)throw new IllegalArgumentException("This chapter was deleted.");
@@ -341,16 +348,17 @@ public class MainActivity extends Activity {
     private void setPageImage(ImageView image,Bitmap bitmap){Bitmap old=displayedBitmap;image.setImageBitmap(bitmap);displayedBitmap=bitmap;if(old!=null&&old!=bitmap&&!old.isRecycled())old.recycle();}
     private void startSession(Planner.Session s) {
         JSONObject chapter=store.find("chapters",s.topic.id);if(chapter==null)return;
+        final AlertDialog[] dialog={null};
         LinearLayout f=form();label(f,s.topic.subject+" · "+s.minutes+" planned minutes",14,muted,false);
         label(f,"Open your notes, then log the minutes you actually studied. Your plan updates only when you save progress.",15,ink,false);
-        button(f,"Open chapter notes",true,()->notes(chapter));
-        button(f,"Log study progress",false,()->logProgress(s));
-        ScrollView sc=new ScrollView(this);sc.addView(f);new AlertDialog.Builder(this).setTitle(s.topic.title).setView(sc).setNegativeButton("Close",null).show();
+        button(f,"Open chapter notes",true,()->{dialog[0].dismiss();notes(chapter);});
+        button(f,"Log study progress",false,()->{dialog[0].dismiss();logProgress(s);});
+        ScrollView sc=new ScrollView(this);sc.addView(f);dialog[0]=new AlertDialog.Builder(this).setTitle(s.topic.title).setView(sc).setNegativeButton("Close",null).show();
     }
     private void logProgress(Planner.Session s) {
         LinearLayout f=form();EditText minutes=field(f,"Minutes actually studied","",true);
-        label(f,"How well do you understand this chapter?",14,muted,false);Spinner confidence=new Spinner(this);confidence.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Need help","Okay","Confident"}));f.addView(confidence);
-        CheckBox complete=new CheckBox(this);complete.setText("I have finished this chapter's planned work");f.addView(complete);
+        label(f,"How well do you understand this chapter?",14,muted,false);Spinner confidence=new Spinner(this);confidence.setAdapter(confidenceAdapter());f.addView(confidence);
+        CheckBox complete=new CheckBox(this);complete.setTextColor(ink);complete.setButtonTintList(ColorStateList.valueOf(accent));complete.setText("I have finished this chapter's planned work");f.addView(complete);
         formDialog("Save your progress",f,"Save progress",()->{
             JSONObject c=store.find("chapters",s.topic.id);if(c==null)throw new IllegalArgumentException("This chapter no longer exists.");int actual=number(minutes,1,720);
             try{c.put("remaining",complete.isChecked()?0:Math.max(0,c.optInt("remaining")-actual));c.put("confidence",confidence.getSelectedItemPosition());}catch(JSONException e){throw new IllegalArgumentException(e);}
