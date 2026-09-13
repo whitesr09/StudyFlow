@@ -215,10 +215,11 @@ public class MainActivity extends Activity {
         TextView heading=text(title,24,ink,true);heading.setPadding(dp(22),0,dp(22),dp(16));shell.addView(heading);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.addView(f);
         shell.addView(scroll,new LinearLayout.LayoutParams(-1,-2,1));
+        TextView validation=text("",13,ThemeColors.readable(0xffc5374c,bg,card),false);validation.setPadding(dp(22),dp(8),dp(22),0);validation.setVisibility(View.GONE);shell.addView(validation);
         LinearLayout actions=new LinearLayout(this);actions.setPadding(dp(16),dp(12),dp(16),0);shell.addView(actions);
         AlertDialog d=new AlertDialog.Builder(this).create();d.setView(shell,0,0,0,0);
         if(save!=null) {TextView cancel=button(cancelLabel,false,d::dismiss);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(0,0,dp(8),0);actions.addView(cancel,lp);}
-        TextView confirm=button(positive,true,()->{try{if(save!=null)save.run();d.dismiss();}catch(IllegalArgumentException ex){toast(ex.getMessage());}});
+        TextView confirm=button(positive,true,()->{try{validation.setVisibility(View.GONE);if(save!=null)save.run();d.dismiss();}catch(IllegalArgumentException ex){validation.setText(ex.getMessage());validation.setVisibility(View.VISIBLE);validation.announceForAccessibility(ex.getMessage());}});
         actions.addView(confirm,new LinearLayout.LayoutParams(0,-2,1));
         d.setOnShowListener(v->{Window w=d.getWindow();if(w!=null){w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));w.setDimAmount(.65f);w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
             w.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels-dp(28),dp(540)),WindowManager.LayoutParams.WRAP_CONTENT);
@@ -241,13 +242,26 @@ public class MainActivity extends Activity {
         LinearLayout f=form();EditText name=field(f,"Subject name",existing==null?"":existing.optString("name"),false);
         final LocalDate[] date={existing==null?LocalDate.now().plusDays(14):LocalDate.parse(existing.optString("exam"))};
         TextView dateButton=button("Exam: "+date[0].format(shortDate),false,()->{});
-        dateButton.setOnClickListener(v->{LinearLayout dates=form();EditText input=field(dates,"Exam date · YYYY-MM-DD",date[0].toString(),false);formDialog("Choose exam date",dates,"Use date",()->{try{LocalDate parsed=LocalDate.parse(input.getText().toString().trim());if(!parsed.isAfter(LocalDate.now())||parsed.isAfter(LocalDate.now().plusDays(730)))throw new Exception();date[0]=parsed;dateButton.setText("Exam: "+parsed.format(shortDate));}catch(Exception ex){throw new IllegalArgumentException("Enter a date from tomorrow to two years ahead, such as "+LocalDate.now().plusDays(14)+".");}});});f.addView(dateButton);
+        dateButton.setOnClickListener(v->chooseDate(date[0],chosen->{date[0]=chosen;dateButton.setText("Exam: "+chosen.format(shortDate));}));f.addView(dateButton);
         formDialog(existing==null?"New subject":"Edit subject",f,"Save",()->{
             String n=required(name);if(!date[0].isAfter(LocalDate.now())||date[0].isAfter(LocalDate.now().plusDays(730)))throw new IllegalArgumentException("Choose an exam date from tomorrow to two years ahead.");
             if(existing==null)store.array("subjects").put(Store.object("id",Store.id(),"name",n,"exam",date[0].toString()));
             else {try{existing.put("name",n);existing.put("exam",date[0].toString());}catch(JSONException e){throw new IllegalArgumentException(e);}}
             saveAndShow();
         });
+    }
+    private void chooseDate(LocalDate current,java.util.function.Consumer<LocalDate> selected) {
+        LinearLayout f=form();final java.time.YearMonth[] month={java.time.YearMonth.from(current)};final LocalDate[] choice={current};
+        LinearLayout navigation=new LinearLayout(this);navigation.setGravity(Gravity.CENTER_VERTICAL);f.addView(navigation);TextView heading=text("",18,ink,true);heading.setGravity(Gravity.CENTER);
+        TextView back=button("‹",false,()->{}),next=button("›",false,()->{});back.setContentDescription("Previous month");next.setContentDescription("Next month");navigation.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));navigation.addView(heading,new LinearLayout.LayoutParams(0,-2,1));navigation.addView(next,new LinearLayout.LayoutParams(dp(48),dp(48)));gap(f,12);
+        LinearLayout grid=column();f.addView(grid);TextView dateLabel=text("",14,accent,true);gap(f,12);f.addView(dateLabel);
+        final Runnable[] redraw={null};Runnable draw=()->{heading.setText(month[0].format(DateTimeFormatter.ofPattern("MMMM yyyy",Locale.getDefault())));grid.removeAllViews();LinearLayout weekdays=new LinearLayout(this);grid.addView(weekdays);for(String day:new String[]{"M","T","W","T","F","S","S"}){TextView t=text(day,12,muted,true);t.setGravity(Gravity.CENTER);weekdays.addView(t,new LinearLayout.LayoutParams(0,dp(32),1));}
+            int offset=month[0].atDay(1).getDayOfWeek().getValue()-1;for(int week=0;week<6;week++){LinearLayout row=new LinearLayout(this);grid.addView(row);for(int col=0;col<7;col++){int n=week*7+col-offset+1;TextView day=text("",14,ink,true);day.setGravity(Gravity.CENTER);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(44),1);lp.setMargins(dp(1),dp(1),dp(1),dp(1));row.addView(day,lp);if(n<1||n>month[0].lengthOfMonth())continue;LocalDate value=month[0].atDay(n);day.setText(String.valueOf(n));day.setContentDescription(value.toString());boolean enabled=value.isAfter(LocalDate.now())&&!value.isAfter(LocalDate.now().plusDays(730));day.setEnabled(enabled);day.setAlpha(enabled?1:.25f);if(value.equals(choice[0])){day.setBackground(shape(accent,12));day.setTextColor(onAccent);}day.setOnClickListener(v->{choice[0]=value;redraw[0].run();});}}
+            dateLabel.setText("Selected · "+choice[0].format(shortDate));};
+        // The redraw callback is scoped to this dialog, avoiding any Activity-wide calendar state.
+        redraw[0]=draw;
+        back.setOnClickListener(v->{java.time.YearMonth previous=month[0].minusMonths(1);if(!previous.isBefore(java.time.YearMonth.from(LocalDate.now()))){month[0]=previous;draw.run();}});next.setOnClickListener(v->{java.time.YearMonth following=month[0].plusMonths(1);if(!following.isAfter(java.time.YearMonth.from(LocalDate.now().plusDays(730)))){month[0]=following;draw.run();}});draw.run();
+        formDialog("Choose exam date",f,"Use date",()->{if(!choice[0].isAfter(LocalDate.now())||choice[0].isAfter(LocalDate.now().plusDays(730)))throw new IllegalArgumentException("Choose a future date within two years.");selected.accept(choice[0]);});
     }
     private void chapterForm(JSONObject existing) {
         LinearLayout f=form();EditText name=field(f,"Chapter name",existing==null?"":existing.optString("name"),false);

@@ -4,7 +4,7 @@ An offline Android workspace connecting chapter notes with a realistic exam plan
 
 ## Minimal edition — 0.3.0
 
-- All app confirmation forms, including focus discard and deletion, now use the themed dialog engine. Confidence is a themed choice sheet; exam dates use a themed, validated YYYY-MM-DD input.
+- All app confirmation forms, including focus discard and deletion, now use the themed dialog engine. Confidence is a themed choice sheet; exam dates use a themed month calendar with future-date validation. Form errors appear inline.
 - Dedicated Appearance screen with a live preview, Minimal and Minimal Dark themes inspired by the supplied reference, original themes, eight color presets, custom hex color with preview, reduced motion, and Android palette matching on Android 12+. Android mode reads the system accent palette; it does not read wallpaper files or require wallpaper/storage permission. System colors refresh on return to the app. Older versions retain theme/custom accents.
 - Accent shades adapt for at least 4.5:1 contrast against both surfaces and backgrounds, with contrasting button labels. 20,480 sampled combinations are tested.
 - Five additions: (1) PDF/image pinch, double-tap and toolbar zoom with panning; (2) three recently opened documents/notes on Today and Library; (3) pin subjects to the top of Library; (4) actual logged study minutes over seven days and all-time subject totals; (5) export saved written notes to UTF-8 text with Android's save picker.

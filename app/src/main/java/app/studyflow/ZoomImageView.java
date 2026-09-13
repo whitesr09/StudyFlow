@@ -27,7 +27,7 @@ final class ZoomImageView extends ImageView {
     @Override public boolean onTouchEvent(MotionEvent e){
         if(e.getActionMasked()==MotionEvent.ACTION_DOWN){lastX=e.getX();lastY=e.getY();getParent().requestDisallowInterceptTouchEvent(isZoomed());}
         if(e.getPointerCount()>1)getParent().requestDisallowInterceptTouchEvent(true);
-        pinch.onTouchEvent(e);taps.onTouchEvent(e);
+        pinch.onTouchEvent(e);taps.onTouchEvent(e);if(isZoomed())getParent().requestDisallowInterceptTouchEvent(true);
         if(e.getActionMasked()==MotionEvent.ACTION_MOVE&&!scaling&&e.getPointerCount()==1&&isZoomed()){tx+=e.getX()-lastX;ty+=e.getY()-lastY;bound();invalidate();}
         lastX=e.getX();lastY=e.getY();
         if(e.getActionMasked()==MotionEvent.ACTION_UP||e.getActionMasked()==MotionEvent.ACTION_CANCEL){getParent().requestDisallowInterceptTouchEvent(false);scaling=false;}
