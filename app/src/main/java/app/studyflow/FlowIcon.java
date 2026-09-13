@@ -9,6 +9,7 @@ final class FlowIcon extends Drawable {
     FlowIcon(String name,int color){this.name=name;p.setColor(color);p.setStrokeWidth(1.8f);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);}
     @Override public void draw(Canvas canvas){canvas.save();Rect b=getBounds();canvas.translate(b.left,b.top);canvas.scale(b.width()/24f,b.height()/24f);p.setStyle(Paint.Style.STROKE);
         switch(name){
+            case "telegram":Path plane=new Path();plane.moveTo(2,10);plane.lineTo(22,3);plane.lineTo(18,22);plane.lineTo(11,16);plane.lineTo(7,20);plane.lineTo(8,13);plane.lineTo(18,6);plane.lineTo(8,13);plane.close();canvas.drawPath(plane,p);break;
             case "home":Path home=new Path();home.moveTo(3,11);home.lineTo(12,3);home.lineTo(21,11);home.moveTo(5,10);home.lineTo(5,21);home.lineTo(10,21);home.lineTo(10,15);home.lineTo(14,15);home.lineTo(14,21);home.lineTo(19,21);home.lineTo(19,10);canvas.drawPath(home,p);break;
             case "book":canvas.drawRoundRect(3,4,21,21,2,2,p);canvas.drawLine(12,4,12,21,p);canvas.drawLine(6,8,9,8,p);canvas.drawLine(15,8,18,8,p);break;
             case "cards":canvas.drawRoundRect(6,6,21,21,2,2,p);canvas.drawLine(3,17,3,3,p);canvas.drawLine(3,3,17,3,p);canvas.drawLine(10,12,17,12,p);canvas.drawLine(10,16,15,16,p);break;

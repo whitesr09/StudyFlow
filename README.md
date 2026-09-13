@@ -88,3 +88,11 @@ This artifact is a debug-signed testing APK, not a production release. Fresh run
 `Store.java`: atomic JSON persistence and model adapters.
 `Planner.java`: deterministic Android-independent scheduling engine.
 `tests/PlannerTest.java`: deadline, capacity, days-off, completion and override invariants.
+
+### 0.7 navigation and document handling
+
+- Back arrows and Android Back follow the visited section/document history. Workspace scroll position is restored and history survives Activity recreation.
+- Telegram joins the centered Connect footer. Minimal themes include an interactive Learn / Recall / Review diagram driven by chapter and card counts.
+- Office files first offer opening the unchanged original in a compatible installed viewer. The homegrown preview is explicitly optional and simplified; it is not a complete Office renderer.
+- Attach a PDF exported by your Office app for an accurate static page layout inside StudyFlow. This does not convert the original or preserve slide animations. Imported PDFs are validated and limited to 100 MB.
+- Permanent release signing is configured with a pinned certificate. See [SIGNING.md](SIGNING.md) for the one-time secret setup and existing debug-build migration limitation. PR artifacts remain debug test builds; manual builds additionally produce signed releases after validation.
