@@ -36,6 +36,10 @@ final class OfficePreview implements AutoCloseable {
         // Reject DTDs before parsing, including UTF-16/32 encoded XML.
         String probe=new String(data,java.nio.charset.StandardCharsets.ISO_8859_1).replace("\u0000","");
         if(probe.contains("<!DOCTYPE")||probe.contains("<!ENTITY"))throw new IOException("External entities are not supported.");
+        javax.xml.parsers.SAXParserFactory sf=javax.xml.parsers.SAXParserFactory.newInstance();sf.setNamespaceAware(true);
+        org.xml.sax.XMLReader reader=sf.newSAXParser().getXMLReader();reader.setEntityResolver((publicId,systemId)->{throw new org.xml.sax.SAXException("External entities blocked");});
+        reader.setContentHandler(new org.xml.sax.helpers.DefaultHandler(){int depth,count;public void startElement(String u,String l,String q,org.xml.sax.Attributes a)throws org.xml.sax.SAXException{if(++depth>128||++count>100000)throw new org.xml.sax.SAXException("Document structure exceeds preview limits");}public void endElement(String u,String l,String q){depth--;}});
+        reader.parse(new InputSource(new ByteArrayInputStream(data)));
         DocumentBuilderFactory f=DocumentBuilderFactory.newInstance();f.setNamespaceAware(true);f.setExpandEntityReferences(false);
         DocumentBuilder b=f.newDocumentBuilder();b.setEntityResolver((publicId,systemId)->{throw new org.xml.sax.SAXException("External entities blocked");});
         return b.parse(new ByteArrayInputStream(data)).getDocumentElement();
@@ -79,8 +83,13 @@ final class OfficePreview implements AutoCloseable {
             Element document=xml("word/document.xml"),body=first(document,"body"),section=first(document,"sectPr");
             double width=num(attr(first(section,"pgSz"),"w"),12240)/15;
             width=Math.max(320,Math.min(2000,width));
-            StringBuilder html=new StringBuilder("<main class='page' style='width:"+width+"px;min-height:1000px;padding:48px'>");
-            for(Element e:children(body))html.append(wordBlock(e,"word/document.xml"));html.append("</main>");out.pages.add(wrap(html.toString(),(int)width+24));
+            Element margins=first(section,"pgMar");double left=Math.max(0,Math.min(width/3,num(attr(margins,"left"),720)/15)),right=Math.max(0,Math.min(width/3,num(attr(margins,"right"),720)/15)),top=Math.max(0,Math.min(200,num(attr(margins,"top"),720)/15));
+            StringBuilder html=new StringBuilder("<main class='page' style='width:"+width+"px;min-height:1000px;padding:"+top+"px "+right+"px 48px "+left+"px'>");
+            Map<String,String> references=rels("word/document.xml");
+            Element headerRef=first(section,"headerReference");String headerPath=references.get(attr(headerRef,"id"));
+            if(headerPath!=null){html.append("<header>");for(Element e:children(xml(headerPath)))html.append(wordBlock(e,headerPath));html.append("</header>");}
+            for(Element e:children(body))html.append(wordBlock(e,"word/document.xml"));
+            Element footerRef=first(section,"footerReference");String footerPath=references.get(attr(footerRef,"id"));if(footerPath!=null){html.append("<footer>");for(Element e:children(xml(footerPath)))html.append(wordBlock(e,footerPath));html.append("</footer>");}html.append("</main>");out.pages.add(wrap(html.toString(),(int)width+24));
             warnings.add("Document preview: page breaks, fonts, floating objects and pagination may differ from Office.");
         }else {
             Element presentation=xml("ppt/presentation.xml");Element size=first(presentation,"sldSz");double w=num(attr(size,"cx"),9144000)/9525,h=num(attr(size,"cy"),6858000)/9525;
