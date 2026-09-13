@@ -24,7 +24,8 @@ public class MainActivity extends Activity {
     private Store store;
     private LinearLayout root,body,nav;
     private String tab="Today",selectedSubject=null,pendingChapter=null;
-    private int bg,card,ink,muted,line,accent,onAccent;
+    private int bg,card,ink,muted,line,accent,onAccent,accentText;
+    private android.webkit.WebView officeWeb;
     private boolean minimal,lightTheme;
     private String pendingExportNote;
     private static final int EXPORT_NOTE=42;
@@ -52,6 +53,61 @@ public class MainActivity extends Activity {
         super.onSaveInstanceState(state); state.putString("tab",tab); state.putString("subject",selectedSubject); state.putString("pending",pendingChapter);state.putString("exportNote",pendingExportNote);if(reading)state.putString("reader",readerNoteId);
     }
     private int dp(float n) { return Math.round(n*getResources().getDisplayMetrics().density); }
+    private final class OfficeWebView extends android.webkit.WebView {
+        float downX,downY,fitScale=1;boolean multi;Runnable previous=()->{},next=()->{};
+        OfficeWebView(){super(MainActivity.this);}
+        @Override public boolean onTouchEvent(android.view.MotionEvent event){
+            if(event.getActionMasked()==android.view.MotionEvent.ACTION_DOWN){downX=event.getX();downY=event.getY();multi=false;}
+            if(event.getPointerCount()>1)multi=true;
+            if(event.getActionMasked()==android.view.MotionEvent.ACTION_UP&&!multi&&getScale()<=fitScale*1.05f){float dx=event.getX()-downX,dy=event.getY()-downY;if(Math.abs(dx)>dp(90)&&Math.abs(dx)>Math.abs(dy)*2){android.view.MotionEvent cancel=android.view.MotionEvent.obtain(event);cancel.setAction(android.view.MotionEvent.ACTION_CANCEL);super.onTouchEvent(cancel);cancel.recycle();if(dx<0)next.run();else previous.run();return true;}}
+            return super.onTouchEvent(event);
+        }
+    }
+    private void closeOffice(){if(officeWeb!=null){officeWeb.stopLoading();officeWeb.loadUrl("about:blank");officeWeb.destroy();officeWeb=null;}}
+    private void readOffice(JSONObject note) {
+        closeOffice();reading=true;readerNoteId=note.optString("id");final int token=++renderToken;root.removeAllViews();
+        LinearLayout layout=column();layout.setPadding(dp(14),dp(8),dp(14),dp(8));root.addView(layout,new LinearLayout.LayoutParams(-1,-1));
+        LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.addView(iconButton("back","Back to workspace",this::show));TextView name=text(note.optString("name"),16,ink,true);name.setMaxLines(2);header.addView(name,new LinearLayout.LayoutParams(0,-2,1));header.addView(iconButton("external","Open original in Office viewer",()->openExternal(note)));layout.addView(header);
+        TextView status=text("Preparing visual preview…",12,muted,false);status.setPadding(0,dp(8),0,dp(8));layout.addView(status);
+        OfficeWebView web=new OfficeWebView();officeWeb=web;web.setBackgroundColor(0xffe9e9ed);
+        android.webkit.WebSettings ws=web.getSettings();ws.setJavaScriptEnabled(false);ws.setAllowFileAccess(false);ws.setAllowContentAccess(false);ws.setBlockNetworkLoads(true);ws.setBuiltInZoomControls(true);ws.setDisplayZoomControls(false);ws.setUseWideViewPort(true);ws.setLoadWithOverviewMode(true);ws.setDefaultTextEncodingName("UTF-8");
+        web.setWebViewClient(new android.webkit.WebViewClient(){@Override public void onPageFinished(android.webkit.WebView v,String url){web.fitScale=web.getScale();}@Override public boolean shouldOverrideUrlLoading(android.webkit.WebView view,android.webkit.WebResourceRequest request){return true;}@Override public android.webkit.WebResourceResponse shouldInterceptRequest(android.webkit.WebView view,android.webkit.WebResourceRequest request){return new android.webkit.WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[0]));}});
+        layout.addView(web,new LinearLayout.LayoutParams(-1,0,1));LinearLayout controls=new LinearLayout(this);layout.addView(controls);TextView previous=button("Previous",false,()->{}),next=button("Next",false,()->{});controls.addView(previous,new LinearLayout.LayoutParams(0,-2,1));controls.addView(next,new LinearLayout.LayoutParams(0,-2,1));previous.setEnabled(false);next.setEnabled(false);
+        worker.execute(()->{try{OfficePreview.Preview doc=OfficePreview.read(new File(getFilesDir(),note.optString("file")),note.optString("name"));runOnUiThread(()->{if(token!=renderToken||isDestroyed()||officeWeb!=web)return;final int[] at={Math.max(0,Math.min(doc.pages.size()-1,note.optInt("visualPage",1)-1))};
+            Runnable render=()->{web.loadDataWithBaseURL("https://studyflow.invalid/",doc.pages.get(at[0]),"text/html","UTF-8",null);status.setText((DocumentText.extension(note.optString("name")).equals("pptx")?"Slide "+(at[0]+1)+" / "+doc.pages.size():"Document preview")+" · pinch to zoom");previous.setEnabled(at[0]>0);next.setEnabled(at[0]<doc.pages.size()-1);previous.setAlpha(previous.isEnabled()?1:.4f);next.setAlpha(next.isEnabled()?1:.4f);try{note.put("visualPage",at[0]+1);note.put("lastOpened",System.currentTimeMillis());}catch(JSONException ignored){}save();};
+            previous.setOnClickListener(v->{if(at[0]>0){at[0]--;render.run();}});next.setOnClickListener(v->{if(at[0]<doc.pages.size()-1){at[0]++;render.run();}});
+            web.previous=()->{if(at[0]>0){at[0]--;render.run();}};web.next=()->{if(at[0]<doc.pages.size()-1){at[0]++;render.run();}};
+            if(doc.pages.size()==1)controls.setVisibility(View.GONE);
+            button(layout,"Preview details / original layout",false,()->{LinearLayout f=form();label(f,doc.notice,14,muted,false);final AlertDialog[] details={null};button(f,"Text view & search",false,()->{details[0].dismiss();readFile(note,true);});button(f,"Open original in Office viewer",true,()->openExternal(note));details[0]=sheet("Document fidelity",f,"Close",null);});render.run();
+        });}catch(Exception|OutOfMemoryError e){runOnUiThread(()->{if(token!=renderToken||isDestroyed())return;status.setText("Visual preview unavailable. Open the original with a compatible Office viewer.");button(layout,"Open original document",true,()->openExternal(note));});}});
+    }
+    private String actionIcon(String title){String t=title.toLowerCase(Locale.ROOT);if(t.contains("search")||t.contains("find"))return "search";if(t.contains("back")||t.startsWith("←"))return "back";if(t.contains("add")||t.contains("create")||t.contains("new"))return "plus";if(t.contains("focus")||t.contains("time"))return "clock";if(t.contains("exam")||t.contains("plan")||t.contains("date"))return "calendar";if(t.contains("insight")||t.contains("history"))return "chart";if(t.contains("card")||t.contains("review"))return "cards";if(t.contains("theme")||t.contains("color")||t.contains("settings"))return "settings";return "arrow";}
+    private TextView navItem(String item){boolean selected=tab.equals(item);TextView v=text(item,10,selected?ink:muted,true);v.setGravity(Gravity.CENTER);v.setPadding(dp(4),dp(9),dp(4),dp(8));FlowIcon icon=new FlowIcon(item.equals("Today")?"home":item.equals("Library")?"book":item.equals("Plan")?"calendar":"chart",selected?ink:muted);icon.setBounds(0,0,dp(22),dp(22));v.setCompoundDrawables(null,icon,null,null);v.setCompoundDrawablePadding(dp(5));v.setBackground(shape(selected?ThemeColors.blend(accent,card,.82f):bg,12));v.setMinHeight(dp(56));v.setFocusable(true);v.setContentDescription(item+(selected?", selected":""));v.setSelected(selected);v.setOnClickListener(x->{tab=item;selectedSubject=null;show();});v.setStateListAnimator(pressAnimator());return v;}
+    private void minimalGrid(LinearLayout target,String[] names,String[] icons,Runnable[] actions){for(int i=0;i<names.length;i+=2){LinearLayout row=new LinearLayout(this);target.addView(row);for(int j=i;j<Math.min(i+2,names.length);j++){final int n=j;LinearLayout tile=column();tile.setPadding(dp(16),dp(18),dp(16),dp(18));GradientDrawable surface=shape(card,16);surface.setStroke(dp(1),line);tile.setBackground(new RippleDrawable(ColorStateList.valueOf(0x18808080),surface,null));ImageView icon=new ImageView(this);icon.setImageDrawable(new FlowIcon(icons[j],ink));tile.addView(icon,new LinearLayout.LayoutParams(dp(25),dp(25)));gap(tile,18);label(tile,names[j],15,ink,true);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(j==i?0:dp(6),0,j==i?dp(6):0,dp(12));row.addView(tile,lp);tile.setFocusable(true);tile.setContentDescription(names[j]);tile.setOnClickListener(v->actions[n].run());tile.setStateListAnimator(pressAnimator());}}}
+    private void go(String destination){tab=destination;selectedSubject=null;show();}
+    private void minimalToday(){
+        title(LocalDate.now().format(shortDate),"Space to grow.","A small step today. A clearer mind tomorrow.");
+        LinearLayout hero=panel(body);LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);LinearLayout words=column();label(words,"YOUR DAILY PRACTICE",10,muted,true);gap(words,12);label(words,store.usedToday()+" min",36,ink,false);label(words,"of "+store.root.optInt("goal",30)+" min today",13,muted,false);row.addView(words,new LinearLayout.LayoutParams(0,-2,1));row.addView(new MinimalArt(this,ink,accent,line),new LinearLayout.LayoutParams(dp(120),dp(120)));hero.addView(row);gap(hero,10);
+        label(hero,StudyTools.streak(studyDays(),LocalDate.now())+" day streak",13,accent,true);button(hero,"Set daily goal",false,this::goalForm);
+        JSONObject active=store.find("chapters",store.root.optString("focusChapter"));if(active!=null)button(body,"Resume focus · "+active.optString("name"),true,()->openFocus(active));
+        gap(body,14);minimalGrid(body,new String[]{"My subjects","Recall cards","Exam calendar","Find a note"},new String[]{"book","cards","calendar","search"},new Runnable[]{()->go("Library"),()->go("Cards"),()->go("Exams"),()->go("Search")});
+        label(body,"This week",20,ink,true);gap(body,10);body.addView(new WeekChart(this,studyDays(),ink,accent,line,store.root.optBoolean("reduceMotion")),new LinearLayout.LayoutParams(-1,dp(156)));gap(body,20);
+        Planner.Result plan=store.plan();if(plan.unscheduledMinutes>0)warning(plan.unscheduledMinutes+" minutes need more room before your exams.");label(body,"Up next",22,ink,true);gap(body,12);int count=0;
+        for(Planner.Session session:plan.sessions)if(session.date.equals(LocalDate.now())){sessionCard(session);if(++count==3)break;}
+        if(count==0){label(body,store.array("subjects").length()==0?"Your workspace starts with one subject.":"No planned sessions today. Make room for rest or a short review.",15,muted,false);button(body,store.array("subjects").length()==0?"Create a subject":"Browse your plan",true,()->{if(store.array("subjects").length()==0)subjectForm(null);else go("Plan");});}else button(body,"See the full plan",false,()->go("Plan"));
+        recentDocuments();
+    }
+    private void minimalLibrary(){if(selectedSubject!=null&&store.find("subjects",selectedSubject)!=null){subjectDetail();return;}title("Your library","Ideas live here.","Subjects, chapters, and everything you are learning.");button(body,"Search workspace",false,()->go("Search"));gap(body,16);minimalGrid(body,new String[]{"New subject","Recall cards"},new String[]{"plus","cards"},new Runnable[]{()->subjectForm(null),()->go("Cards")});
+        JSONArray a=store.array("subjects");List<JSONObject> subjects=new ArrayList<>();for(int i=0;i<a.length();i++)subjects.add(a.optJSONObject(i));subjects.sort((x,y)->Boolean.compare(y.optBoolean("pinned"),x.optBoolean("pinned")));
+        if(subjects.isEmpty())label(body,"Add a subject to give your notes a home.",16,muted,false);
+        for(JSONObject subject:subjects){LinearLayout p=panel(body);LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);LinearLayout info=column();label(info,subject.optString("name"),24,ink,true);label(info,"EXAM · "+subject.optString("exam"),11,muted,false);row.addView(info,new LinearLayout.LayoutParams(0,-2,1));row.addView(iconButton("pin",subject.optBoolean("pinned")?"Unpin subject":"Pin subject",()->{try{subject.put("pinned",!subject.optBoolean("pinned"));}catch(JSONException ignored){}saveAndShow();}));p.addView(row);if(subject.optBoolean("pinned"))label(p,"Pinned",11,accent,true);
+            int total=0,done=0;JSONArray chapters=store.array("chapters");for(int i=0;i<chapters.length();i++){JSONObject c=chapters.optJSONObject(i);if(c.optString("subject").equals(subject.optString("id"))){total++;if(c.optInt("remaining")==0)done++;}}gap(p,14);label(p,done+" of "+total+" chapters studied",13,muted,false);ProgressBar progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setMax(Math.max(1,total));progress.setProgress(done);progress.setProgressTintList(ColorStateList.valueOf(accent));progress.setProgressBackgroundTintList(ColorStateList.valueOf(line));p.addView(progress,new LinearLayout.LayoutParams(-1,dp(8)));button(p,"Open subject",false,()->{selectedSubject=subject.optString("id");show();});}
+        recentDocuments();
+    }
+    private LocalDate minimalPlanDate=LocalDate.now();
+    private void minimalPlan(){title("Your rhythm","One day at a time.","Choose a day to see a focused plan.");button(body,"Weekly availability",false,()->budget(false));gap(body,16);HorizontalScrollView days=new HorizontalScrollView(this);days.setHorizontalScrollBarEnabled(false);LinearLayout dates=new LinearLayout(this);days.addView(dates);body.addView(days);for(int i=0;i<14;i++){LocalDate date=LocalDate.now().plusDays(i);boolean chosen=date.equals(minimalPlanDate);TextView day=text(date.format(DateTimeFormatter.ofPattern("EEE\nd",Locale.getDefault())),13,chosen?onAccent:ink,true);day.setTextColor(chosen?onAccent:ink);day.setGravity(Gravity.CENTER);day.setBackground(shape(chosen?accent:card,12));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(56),dp(66));lp.setMargins(0,0,dp(8),0);dates.addView(day,lp);day.setFocusable(true);day.setContentDescription(date.toString());day.setOnClickListener(v->{minimalPlanDate=date;show();});if(chosen)days.post(()->days.smoothScrollTo(day.getLeft(),0));}gap(body,22);label(body,minimalPlanDate.format(shortDate),20,ink,true);gap(body,12);Planner.Result p=store.plan();if(p.unscheduledMinutes>0)warning(p.unscheduledMinutes+" minutes cannot fit before your exams.");int count=0;for(Planner.Session session:p.sessions)if(session.date.equals(minimalPlanDate)){sessionCard(session);count++;}if(count==0)label(body,"No sessions planned for this day.",15,muted,false);button(body,"Browse all upcoming sessions",false,()->{LinearLayout f=form();int shown=0;for(Planner.Session session:p.sessions){label(f,session.date+" · "+session.topic.subject+" · "+session.topic.title+" · "+session.minutes+" min",14,ink,false);gap(f,12);if(++shown>=100)break;}if(shown==0)label(f,"Your plan will appear when you add chapters.",14,muted,false);sheet("Upcoming · first 100 sessions",f,"Close",null);});}
+    private void minimalSettings(){title("Your workspace","Make it personal.","Quiet tools. Thoughtful details.");label(body,"APPEARANCE",11,muted,true);gap(body,12);button(body,"Theme & accent colors",false,()->go("Appearance"));gap(body,24);label(body,"STUDY PRACTICE",11,muted,true);button(body,"Daily goal",false,this::goalForm);button(body,"Weekly availability",false,()->budget(false));button(body,"Session history",false,()->go("History"));button(body,"Study insights",false,()->go("Insights"));gap(body,24);label(body,"ON THIS DEVICE",11,muted,true);gap(body,10);label(body,"Your notes stay private. No account or cloud service. Keep original files: uninstalling removes saved data.",14,muted,false);gap(body,26);label(body,"FOLLOW",11,muted,true);gap(body,12);LinearLayout social=new LinearLayout(this);social.addView(iconButton("instagram","Instagram",()->openLink("https://www.instagram.com/__nshd.__?stkn=emExd3hxZndzN21o")));social.addView(iconButton("whatsapp","WhatsApp",()->openLink("https://wa.me/918590455801")));body.addView(social);gap(body,26);label(body,"STUDYFLOW / 0.5.0",11,muted,true);gap(body,8);label(body,"MADE  BY  N S H D",12,ink,true);}
+
     private void colors() {
         String theme=store==null?"Minimal":store.root.optString("theme","Midnight");minimal=theme.startsWith("Minimal");lightTheme=theme.equals("Paper")||theme.equals("Minimal");
         bg=Color.parseColor(lightTheme?(minimal?"#FAF9FC":"#F4F6F2"):theme.equals("AMOLED")?"#000000":minimal?"#111116":"#0B1220");
@@ -59,7 +115,7 @@ public class MainActivity extends Activity {
         int seed=Color.parseColor(minimal?"#A374EC":lightTheme?"#236C57":"#A6E8CD");
         if(store!=null){String mode=store.root.optString("accentMode","Theme");if(mode.equals("Custom"))try{seed=Color.parseColor(store.root.optString("customAccent","#A374EC"));}catch(Exception ignored){}
             if(mode.equals("Android")&&Build.VERSION.SDK_INT>=31)seed=getColor(lightTheme?android.R.color.system_accent1_600:android.R.color.system_accent1_200);}
-        accent=ThemeColors.readable(seed,bg,card);onAccent=ThemeColors.on(accent);
+        accent=ThemeColors.exactAccent(seed);accentText=ThemeColors.readable(seed,bg,card);onAccent=ThemeColors.on(accent);
     }
     @Override protected void onResume(){super.onResume();if(store!=null&&root!=null&&store.root.optString("accentMode").equals("Android")){int before=accent;colors();if(before!=accent){String id=readerNoteId;show();JSONObject n=id==null?null:store.find("notes",id);if(n!=null)readFile(n);}}}
     private GradientDrawable shape(int color,int radius) {
@@ -67,16 +123,19 @@ public class MainActivity extends Activity {
     }
     private LinearLayout column() { LinearLayout l=new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); return l; }
     private TextView text(String value,int size,int color,boolean bold) {
-        TextView t=new TextView(this); t.setText(value); t.setTextSize(size); t.setTextColor(color);
-        t.setFontFeatureSettings("kern"); t.setLineSpacing(dp(3),1);
-        t.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));
+        TextView t=new TextView(this); t.setText(value); t.setTextSize(size); t.setTextColor(color==accent?accentText:color);
+        t.setFontFeatureSettings("kern");
+        if(minimal)t.setLetterSpacing(size>=24?-.035f:.005f); t.setLineSpacing(dp(3),1);
+        t.setTypeface(Typeface.create(minimal?(size>=26?"sans-serif-light":bold?"sans-serif-medium":"sans-serif"):bold?"sans-serif-medium":"sans-serif",minimal?Typeface.NORMAL:bold?Typeface.BOLD:Typeface.NORMAL));
         return t;
     }
     private void gap(LinearLayout target,int h) { View v=new View(this); target.addView(v,new LinearLayout.LayoutParams(1,dp(h))); }
     private void label(LinearLayout target,String value,int size,int color,boolean bold) { target.addView(text(value,size,color,bold)); }
     private TextView button(String title,boolean primary,Runnable action) {
-        TextView t=text(title,14,primary?onAccent:ink,true); t.setGravity(Gravity.CENTER); t.setMinHeight(dp(50)); t.setPadding(dp(14),dp(12),dp(14),dp(12));
-        t.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33808080),shape(primary?accent:card,16),null));
+        TextView t=text(minimal?title.replace("  →","").replace("  +",""):title,14,primary?onAccent:ink,true);t.setTextColor(primary?onAccent:ink); t.setGravity(Gravity.CENTER); t.setMinHeight(dp(50)); t.setPadding(dp(14),dp(12),dp(14),dp(12));
+        GradientDrawable surface=shape(primary?accent:card,minimal?12:16);if(minimal)surface.setStroke(dp(1),primary&&ThemeColors.contrast(accent,card)<1.5?line:primary?accent:line);
+        t.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33808080),surface,null));
+        if(minimal&&!primary){FlowIcon icon=new FlowIcon(actionIcon(title),ink);icon.setBounds(0,0,dp(18),dp(18));t.setCompoundDrawables(icon,null,null,null);t.setCompoundDrawablePadding(dp(10));t.setGravity(Gravity.CENTER_VERTICAL|Gravity.START);}
         t.setOnClickListener(v->action.run());t.setStateListAnimator(pressAnimator());t.setFocusable(true);return t;
     }
     private android.animation.StateListAnimator pressAnimator() {
@@ -88,11 +147,11 @@ public class MainActivity extends Activity {
     private void button(LinearLayout target,String title,boolean primary,Runnable action) { gap(target,10); target.addView(button(title,primary,action)); }
     private LinearLayout panel(LinearLayout target) {
         LinearLayout p=column(); p.setPadding(dp(20),dp(20),dp(20),dp(20));
-        GradientDrawable g=minimal?shape(card,20):new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{card,bg});g.setCornerRadius(dp(minimal?20:24));g.setStroke(dp(1),line);p.setBackground(g);p.setElevation(dp(minimal?0:2));
+        GradientDrawable g=minimal?shape(card,16):new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{card,bg});g.setCornerRadius(dp(minimal?16:24));g.setStroke(dp(1),line);p.setBackground(g);p.setElevation(dp(minimal?0:2));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=dp(14); target.addView(p,lp); return p;
     }
     private void show() {
-        reading=false;readerNoteId=null; renderToken++; colors();
+        closeOffice();reading=false;readerNoteId=null; renderToken++; colors();
         if(displayedBitmap!=null){displayedBitmap.recycle();displayedBitmap=null;}
         getWindow().setStatusBarColor(bg); getWindow().setNavigationBarColor(bg);
         getWindow().getDecorView().setSystemUiVisibility(lightTheme?View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0);
@@ -108,10 +167,10 @@ public class MainActivity extends Activity {
         LinearLayout top=new LinearLayout(this); top.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("STUDYFLOW",12,accent,true); brand.setLetterSpacing(.2f); top.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
         top.addView(iconButton("settings","Settings",()->{tab="Settings";show();})); body.addView(top); gap(body,22);
-        if(tab.equals("Today")) today(); else if(tab.equals("Library")) library(); else if(tab.equals("Plan")) plan();else if(tab.equals("Appearance"))appearance();else if(tab.equals("Insights"))insights();else if(tab.equals("Search"))workspaceSearch();else if(tab.equals("Cards"))flashcards();else if(tab.equals("History"))history();else if(tab.equals("Exams"))exams();else settings();
+        if(tab.equals("Today")){if(minimal)minimalToday();else today();} else if(tab.equals("Library")){if(minimal)minimalLibrary();else library();} else if(tab.equals("Plan")){if(minimal)minimalPlan();else plan();}else if(tab.equals("Appearance"))appearance();else if(tab.equals("Insights"))insights();else if(tab.equals("Search"))workspaceSearch();else if(tab.equals("Cards"))flashcards();else if(tab.equals("History"))history();else if(tab.equals("Exams"))exams();else {if(minimal)minimalSettings();else settings();}
         nav=new LinearLayout(this); nav.setPadding(dp(14),dp(10),dp(14),dp(10)); nav.setBackgroundColor(bg);
-        for(String item:new String[]{"Today","Library","Plan"}) {
-            TextView b=button(item,tab.equals(item),()->{tab=item;selectedSubject=null;show();});
+        for(String item:(minimal?new String[]{"Today","Library","Plan","Insights"}:new String[]{"Today","Library","Plan"})) {
+            TextView b=minimal?navItem(item):button(item,tab.equals(item),()->{tab=item;selectedSubject=null;show();});
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1); lp.setMargins(dp(3),0,dp(3),0); nav.addView(b,lp);
         }
         root.addView(nav);
@@ -119,7 +178,7 @@ public class MainActivity extends Activity {
     }
     private void title(String eyebrow,String title,String subtitle) {
         label(body,eyebrow.toUpperCase(Locale.ROOT),11,accent,true); gap(body,8);
-        label(body,minimal?title.replace("\n"," "):title,minimal?28:32,ink,true); gap(body,8); label(body,subtitle,14,muted,false); gap(body,24);
+        label(body,minimal?title.replace("\n"," "):title,minimal?34:32,ink,true); gap(body,8); label(body,subtitle,14,muted,false); gap(body,24);
     }
     private void today() {
         title(LocalDate.now().format(shortDate),"Make room\nfor progress.","Your notes. Your pace. A clearer next step.");
@@ -376,8 +435,13 @@ public class MainActivity extends Activity {
             }catch(Exception e){file.delete();runOnUiThread(()->toast("Import failed. Check the file and available storage. "+e.getMessage()));}
         });
     }
-    private void readFile(JSONObject note) {
+    private void readFile(JSONObject note) {readFile(note,false);}
+    private void readFile(JSONObject note,boolean textOnly) {
+        closeOffice();
         if(store.find("notes",note.optString("id"))==null){toast("This note was deleted.");return;}
+        String extension=DocumentText.extension(note.optString("name"));
+        if(!textOnly&&OfficePreview.supports(note.optString("name"))){readOffice(note);return;}
+        if(Arrays.asList("doc","ppt").contains(extension)){openExternal(note);return;}
         File file=new File(getFilesDir(),note.optString("file"));if(!file.exists()){toast("Attachment unavailable. Please import it again.");return;}
         try{note.put("lastOpened",System.currentTimeMillis());}catch(JSONException ignored){}save();
         reading=true;readerNoteId=note.optString("id");renderToken++;root.removeAllViews();
@@ -518,7 +582,7 @@ public class MainActivity extends Activity {
         socials.addView(iconButton("instagram","Instagram · __nshd.__",()->openLink("https://www.instagram.com/__nshd.__?stkn=emExd3hxZndzN21o")));
         View spacer=new View(this);socials.addView(spacer,new LinearLayout.LayoutParams(dp(20),1));
         socials.addView(iconButton("whatsapp","WhatsApp · N S H D",()->openLink("https://wa.me/918590455801")));
-        gap(body,12);label(body,"STUDYFLOW  /  0.4.0",12,accent,true);gap(body,6);label(body,"Minimal edition · your space, your colors",13,muted,false);
+        gap(body,12);label(body,"STUDYFLOW  /  0.5.0",12,accent,true);gap(body,6);label(body,"Minimal edition · your space, your colors",13,muted,false);
         gap(body,26);TextView credit=text("MADE  BY  N S H D",12,muted,true);credit.setLetterSpacing(.16f);credit.setGravity(Gravity.CENTER);body.addView(credit);gap(body,12);
     }
     private void appearance() {
@@ -528,8 +592,8 @@ public class MainActivity extends Activity {
         button(preview,"This is your accent",true,()->toast("Changes apply across StudyFlow."));
         label(body,"Theme",20,ink,true);gap(body,12);
         String[] themes={"Minimal","Minimal Dark","Paper","Midnight","AMOLED"};
-        for(String name:themes){LinearLayout p=panel(body);boolean selected=store.root.optString("theme","Midnight").equals(name);label(p,name+(selected?"  ✓":""),18,ink,true);gap(p,5);label(p,name.equals("Minimal")?"Soft white · lavender · fine outlines":name.equals("Minimal Dark")?"Charcoal · quiet contrast":name.equals("AMOLED")?"True black background":name.equals("Paper")?"Warm white workspace":"Deep blue surfaces",13,muted,false);button(p,selected?"Selected":"Use "+name,selected,()->{store.setting("theme",name);saveAndShow();});}
-        LinearLayout palette=panel(body);label(palette,"Accent color",20,ink,true);gap(palette,8);label(palette,"Text and controls adjust the shade for readable contrast.",13,muted,false);
+        for(String name:themes){LinearLayout p=panel(body);boolean selected=store.root.optString("theme","Midnight").equals(name);label(p,name+(selected?"  ✓":""),18,ink,true);gap(p,5);label(p,name.equals("Minimal")?"Editorial dashboard · icon grids · fine-line charts":name.equals("Minimal Dark")?"Charcoal · editorial layouts · quiet motion":name.equals("AMOLED")?"True black background":name.equals("Paper")?"Warm white workspace":"Deep blue surfaces",13,muted,false);button(p,selected?"Selected":"Use "+name,selected,()->{store.setting("theme",name);saveAndShow();});}
+        LinearLayout palette=panel(body);label(palette,"Accent color",20,ink,true);gap(palette,8);label(palette,"Buttons, charts and highlights use your exact HEX. Small text uses a separate readable shade.",13,muted,false);
         button(palette,"Theme default"+(store.root.optString("accentMode","Theme").equals("Theme")?"  ✓":""),false,()->{store.setting("accentMode","Theme");saveAndShow();});
         String[] colors={"#A374EC","#4263EB","#00866A","#D45B35","#C0447C","#756047","#16858F","#555555"};
         String[] names={"Lavender","Blue","Jade","Terracotta","Rose","Sand","Teal","Graphite"};
@@ -645,7 +709,7 @@ public class MainActivity extends Activity {
         try{startActivityForResult(i,EXPORT_NOTE);}catch(ActivityNotFoundException e){toast("No file-saving app is available on this phone.");}
     }
     private View iconButton(String symbol,String description,Runnable action) {
-        ImageButton b=new ImageButton(this);b.setImageDrawable(new FlowIcon(symbol,accent));b.setContentDescription(description);b.setTooltipText(description);
+        ImageButton b=new ImageButton(this);b.setImageDrawable(new FlowIcon(symbol,minimal?ink:accentText));b.setContentDescription(description);b.setTooltipText(description);
         b.setPadding(dp(13),dp(13),dp(13),dp(13));b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33808080),shape(card,16),null));
         b.setLayoutParams(new LinearLayout.LayoutParams(dp(50),dp(50)));b.setOnClickListener(v->action.run());return b;
     }
@@ -697,12 +761,12 @@ public class MainActivity extends Activity {
     private void saveAndShow() { if(save())show(); }
     private void toast(String value) { Toast.makeText(this,value,Toast.LENGTH_LONG).show(); }
     @Override public void onBackPressed(){if(reading){show();}else if(selectedSubject!=null){selectedSubject=null;show();}else if(!tab.equals("Today")){tab="Today";show();}else super.onBackPressed();}
-    @Override protected void onDestroy(){renderToken++;handler.removeCallbacksAndMessages(null);worker.shutdown();super.onDestroy();}
+    @Override protected void onDestroy(){closeOffice();renderToken++;handler.removeCallbacksAndMessages(null);worker.shutdown();super.onDestroy();}
     private final class Ring extends View {
         private final Paint p=new Paint(3);private final float fraction;private final int percent;private float shown;private android.animation.ValueAnimator animation;
         Ring(int done,int goal){super(MainActivity.this);fraction=Math.min(1,done/(float)goal);percent=Math.round(fraction*100);setContentDescription(percent+" percent of daily study target");}
         @Override protected void onAttachedToWindow(){super.onAttachedToWindow();if((store!=null&&store.root.optBoolean("reduceMotion"))){shown=fraction;return;}animation=android.animation.ValueAnimator.ofFloat(0,fraction);animation.setDuration(650);animation.setInterpolator(new DecelerateInterpolator());animation.addUpdateListener(a->{shown=(float)a.getAnimatedValue();invalidate();});animation.start();}
         @Override protected void onDetachedFromWindow(){if(animation!=null)animation.cancel();super.onDetachedFromWindow();}
-        @Override protected void onDraw(Canvas c){super.onDraw(c);float w=getWidth(),h=getHeight();p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(6));p.setStrokeCap(Paint.Cap.ROUND);p.setColor(line);RectF r=new RectF(dp(6),dp(6),w-dp(6),h-dp(6));c.drawArc(r,0,360,false,p);p.setColor(accent);c.drawArc(r,-90,360*shown,false,p);p.setStyle(Paint.Style.FILL);p.setTextSize(dp(18));p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextAlign(Paint.Align.CENTER);c.drawText(percent+"%",w/2,h/2-(p.ascent()+p.descent())/2,p);}
+        @Override protected void onDraw(Canvas c){super.onDraw(c);float w=getWidth(),h=getHeight();p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(6));p.setStrokeCap(Paint.Cap.ROUND);p.setColor(line);RectF r=new RectF(dp(6),dp(6),w-dp(6),h-dp(6));c.drawArc(r,0,360,false,p);p.setColor(accent);c.drawArc(r,-90,360*shown,false,p);p.setStyle(Paint.Style.FILL);p.setColor(accentText);p.setTextSize(dp(18));p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextAlign(Paint.Align.CENTER);c.drawText(percent+"%",w/2,h/2-(p.ascent()+p.descent())/2,p);}
     }
 }

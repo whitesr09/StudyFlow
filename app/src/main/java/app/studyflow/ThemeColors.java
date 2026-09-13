@@ -2,6 +2,7 @@ package app.studyflow;
 
 /** Color math is independent of Android so arbitrary user colors can be contrast-tested. */
 final class ThemeColors {
+    static int exactAccent(int seed){return 0xff000000 | (seed & 0x00ffffff);}
     static double luminance(int c){return .2126*linear((c>>16)&255)+.7152*linear((c>>8)&255)+.0722*linear(c&255);}
     private static double linear(int n){double s=n/255d;return s<=.04045?s/12.92:Math.pow((s+.055)/1.055,2.4);}
     static double contrast(int a,int b){double x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);}

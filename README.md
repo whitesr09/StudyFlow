@@ -2,6 +2,15 @@
 
 An offline Android workspace connecting chapter notes with a realistic exam plan.
 
+## Visual workspace edition — 0.5.0
+
+- Minimal and Minimal Dark now select distinct screen structures: an editorial dashboard with an original vector study illustration, two-column action tiles, a seven-day animated chart of real study logs, compact Library cards, a two-week date strip in Plan, grouped settings rows and four icon navigation destinations. All screens share lighter typography, outlined surfaces, line icons and motion that respects the reduced-motion setting.
+- Custom HEX stays exact on filled buttons, chart bars, rings and artwork. A separate shade is used for readable foreground text; black/white button labels are chosen for contrast. Tinted surfaces intentionally remain lighter/darker than the raw accent.
+- DOCX opens a formatted visual preview with run styling, paragraph alignment, tables and embedded raster images. PPTX opens slides in presentation order with slide dimensions, positioned text/shapes/images, basic tables, theme colors, and basic layout/master artwork. Pinch zoom and slide controls are provided. Documents stay offline; JavaScript, external images, file/content access and network loads are disabled.
+- **This is a visual preview, not a complete Office rendering engine.** DOCX pagination, floating objects, fonts, styles inherited through complex chains, numbering, equations, charts/SmartArt, grouped shapes, cropped images and some master effects may differ or be omitted. Open the untouched original using the reader's external-viewer icon for full-fidelity viewing in a compatible installed Office app. Legacy DOC/PPT use this route directly. Exporting the original as PDF also preserves its static layout in StudyFlow's PDF reader.
+- Preview bounds: 24 MB of expanded content and at most 300 slides; large or unsupported files can still be opened externally. Visual position is stored separately from previous text-reader positions.
+- CI tests include Office formatting, embedded images, tables, slide geometry/order, Unicode, HTML escaping and external-entity/image blocking, as well as exact-accent preservation and contrast.
+
 ## Active recall edition — 0.4.0
 
 Five new offline features, using the existing minimalist themes and rounded forms:
@@ -18,7 +27,7 @@ Existing data is retained; the cards collection is initialized automatically. No
 
 - All app confirmation forms, including focus discard and deletion, now use the themed dialog engine. Confidence is a themed choice sheet; exam dates use a themed month calendar with future-date validation. Form errors appear inline.
 - Dedicated Appearance screen with a live preview, Minimal and Minimal Dark themes inspired by the supplied reference, original themes, eight color presets, custom hex color with preview, reduced motion, and Android palette matching on Android 12+. Android mode reads the system accent palette; it does not read wallpaper files or require wallpaper/storage permission. System colors refresh on return to the app. Older versions retain theme/custom accents.
-- Accent shades adapt for at least 4.5:1 contrast against both surfaces and backgrounds, with contrasting button labels. 20,480 sampled combinations are tested.
+- Foreground accent shades adapt for at least 4.5:1 contrast against both surfaces and backgrounds, with contrasting button labels. 20,480 sampled combinations are tested.
 - Five additions: (1) PDF/image pinch, double-tap and toolbar zoom with panning; (2) three recently opened documents/notes on Today and Library; (3) pin subjects to the top of Library; (4) actual logged study minutes over seven days and all-time subject totals; (5) export saved written notes to UTF-8 text with Android's save picker.
 - Raster zoom enlarges the existing bounded render, so extreme zoom is not a new high-resolution PDF render. Reset to Fit page for page-swipe gestures.
 
@@ -27,7 +36,7 @@ Existing data is retained; the cards collection is initialized automatically. No
 - Themed rounded dialogs, filled input fields, visible focus borders, compact reader toolbar, vector Settings icon, gradient panels, press animation, animated momentum ring and reduced-motion support. Custom Android Views, without Material 3.
 - Swipe left/right to change reader pages. Vertical scrolling stays inside a page; an additional upward swipe begun at its bottom goes next, and a downward swipe begun at its top goes back. Buttons and page/section jump remain available.
 - All file types can be imported through Android's file picker, up to 100 MB each, copied privately for offline access.
-- Internal reader: PDF, Android-decodable images, TXT, Markdown, CSV, TSV, JSON, XML, HTML, DOCX, PPTX, XLSX, ODT, ODS, ODP and EPUB. Office/OpenDocument/EPUB files are **reflowed text**, not original-layout rendering: embedded images, formulas/styles, chart visuals and rich formatting are not reproduced. XLSX displays cell references and stored values, including cached formula results; it does not recalculate formulas. Text sections are not original document page numbers. UTF-8 and BOM-marked UTF-16 text are supported.
+- Internal reader: PDF, Android-decodable images, TXT, Markdown, CSV, TSV, JSON, XML, HTML, DOCX, PPTX, XLSX, ODT, ODS, ODP and EPUB. In 0.2–0.4, Office/OpenDocument/EPUB files were **reflowed text**; 0.5 adds visual DOCX/PPTX previews described above. Other structured formats remain reflowed, not original-layout rendering: embedded images, formulas/styles, chart visuals and rich formatting are not reproduced. XLSX displays cell references and stored values, including cached formula results; it does not recalculate formulas. Text sections are not original document page numbers. UTF-8 and BOM-marked UTF-16 text are supported.
 - Legacy DOC/PPT/XLS, RTF, encrypted files, unsupported formats, image-only Office files and documents exceeding the 4 MB expanded-text limit use **Open with another app**, requiring a compatible installed viewer. Imported originals remain intact. External viewers receive temporary read access to only the selected attachment.
 - Saved reading position, per-document bookmarks, search within readable document text, and adjustable reading text size. PDF/image text search and OCR are not included.
 - Search chapter notes by title or written content. Attachment contents are searched from inside the text reader.
@@ -38,7 +47,7 @@ Existing data is retained; the cards collection is initialized automatically. No
 
 ## Build from a phone
 
-Open **Actions → Build StudyFlow APK → Run workflow → main**. After the run succeeds, open its **Artifacts** section and download **StudyFlow-0.4.0-debug**. Extract the ZIP and install `app-debug.apk`. Pushes to main also trigger builds.
+Open **Actions → Build StudyFlow APK → Run workflow → main**. After the run succeeds, open its **Artifacts** section and download **StudyFlow-0.5.0-debug**. Extract the ZIP and install `app-debug.apk`. Pushes to main also trigger builds.
 
 The workflow runs scheduling invariants and accent-contrast tests plus document parser tests (Office/EPUB ordering, Unicode, malformed inputs, XML entity rejection and expansion limits), builds the APK, and runs Android lint using JDK 17, Gradle 8.9, and AGP 8.7.3. For a local build with Android SDK 35 and Gradle 8.9 installed, run `gradle assembleDebug lintDebug`. This repository does not yet contain a Gradle wrapper.
 
