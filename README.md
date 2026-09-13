@@ -2,6 +2,24 @@
 
 An offline Android workspace connecting chapter notes with a realistic exam plan.
 
+## Study kit edition — 0.6.0
+
+UI fixes:
+- Cards now reserve space above and below their surfaces, including the Today momentum card after the exam shortcut.
+- Minimal headings use bold type. Study activity explains its units and rolling seven-day range, with an actionable empty state. Populated charts support day/session drill-down and an accessible daily-totals list.
+- Both Settings designs share a centered Follow panel with labelled social icons, a divider, version and creator credit.
+- Dialog surfaces are height-bounded during measurement instead of resizing after their first frame; one window animation replaces the former competing animations. Review and quiz sessions reuse their window across questions. Answer reveal reserves space, and same-screen refreshes avoid restarting the page entrance.
+- PPTX still uses a visual HTML preview, not PDF conversion. Reader labels/details make this explicit; imported originals remain unchanged. Office preview fidelity limits below still apply.
+
+Five new offline features:
+1. Assignments with course/details, deadlines, overdue/today states, completion/reopen, edit/delete and paginated lists.
+2. Quick-note inbox with edit/delete and atomic transfer into chapter notes.
+3. A separate Monday–Sunday weekly study target based on actual logged minutes.
+4. Shuffled practice quizzes from up to 20 saved flashcards, answer reveal and self-assessed scores saved to Insights. They do not change spaced review dates or log study minutes; unfinished quizzes are not recorded.
+5. Needs revision: chapters with Need help/Okay confidence, sorted by confidence then exam date, with direct notes/cards/confidence actions. No revision work is silently added to the plan.
+
+New collections initialize without clearing existing data. New feature mutations use atomic persistence with rollback. CI includes deadline/week-boundary checks and Android emulator smoke checks for spacing, centered footer, review window reuse, feature forms, quiz results, chart states and exact HEX. Screenshots are uploaded as StudyFlow-UI-checks. An emulator pass does not establish bug-free behavior on every phone.
+
 ## Visual workspace edition — 0.5.0
 
 - Minimal and Minimal Dark now select distinct screen structures: an editorial dashboard with an original vector study illustration, two-column action tiles, a seven-day animated chart of real study logs, compact Library cards, a two-week date strip in Plan, grouped settings rows and four icon navigation destinations. All screens share lighter typography, outlined surfaces, line icons and motion that respects the reduced-motion setting.
@@ -47,7 +65,7 @@ Existing data is retained; the cards collection is initialized automatically. No
 
 ## Build from a phone
 
-Open **Actions → Build StudyFlow APK → Run workflow → main**. After the run succeeds, open its **Artifacts** section and download **StudyFlow-0.5.0-debug**. Extract the ZIP and install `app-debug.apk`. Pushes to main also trigger builds.
+Open **Actions → Build StudyFlow APK → Run workflow → main**. After the run succeeds, open its **Artifacts** section and download **StudyFlow-0.6.0-debug**. Extract the ZIP and install `app-debug.apk`. Pushes to main also trigger builds.
 
 The workflow runs scheduling invariants and accent-contrast tests plus document parser tests (Office/EPUB ordering, Unicode, malformed inputs, XML entity rejection and expansion limits), builds the APK, and runs Android lint using JDK 17, Gradle 8.9, and AGP 8.7.3. For a local build with Android SDK 35 and Gradle 8.9 installed, run `gradle assembleDebug lintDebug`. This repository does not yet contain a Gradle wrapper.
 

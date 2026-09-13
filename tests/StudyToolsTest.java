@@ -12,6 +12,11 @@ public class StudyToolsTest {
         check(StudyTools.streak(days,today)==2);days.put(today,1);check(StudyTools.streak(days,today)==3);
         days.put(today.minusDays(1),0);check(StudyTools.streak(days,today)==1);days.remove(today);check(StudyTools.streak(days,today)==0);
         days.put(today.plusDays(1),50);check(StudyTools.streak(days,today)==0);
+        check(StudyTools.weekStart(LocalDate.of(2026,1,4)).equals(LocalDate.of(2025,12,29)));
+        check(StudyTools.weekStart(LocalDate.of(2026,1,5)).equals(LocalDate.of(2026,1,5)));
+        days.clear();days.put(today.minusDays(1),30);days.put(today,20);days.put(today.plusDays(1),99);
+        check(StudyTools.total(days,today.minusDays(1),today)==50);
+        check(StudyTools.deadline(today,today).equals("DUE TODAY"));check(StudyTools.deadline(today.minusDays(1),today).equals("1 DAY OVERDUE"));check(StudyTools.deadline(today.plusDays(1),today).equals("DUE TOMORROW"));
         System.out.println("Review intervals and streak boundaries passed.");
     }
 }

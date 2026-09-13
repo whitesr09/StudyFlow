@@ -42,11 +42,35 @@ jobs:
           javac -d /tmp/studyflow-tests app/src/main/java/app/studyflow/DocumentText.java app/src/main/java/app/studyflow/OfficePreview.java tests/OfficePreviewTest.java
           java -cp /tmp/studyflow-tests app.studyflow.OfficePreviewTest
       - name: Build and lint
-        run: gradle --no-daemon assembleDebug lintDebug
+        run: gradle --no-daemon assembleDebug assembleDebugAndroidTest lintDebug
+      - name: Enable emulator acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Android UI smoke checks
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w app.studyflow.test/app.studyflow.UiChecks | tee /tmp/studyflow-ui-result.txt
+            grep -q STUDYFLOW_UI_OK /tmp/studyflow-ui-result.txt
+            adb pull /sdcard/Android/data/app.studyflow/files/ui-checks app/build/ui-checks
+      - name: Upload UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyFlow-UI-checks
+          path: app/build/ui-checks
+          if-no-files-found: ignore
       - name: Upload installable test APK
         uses: actions/upload-artifact@v4
         with:
-          name: StudyFlow-0.5.0-debug
+          name: StudyFlow-0.6.0-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
