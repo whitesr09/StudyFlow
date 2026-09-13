@@ -33,12 +33,16 @@ jobs:
         run: |
           javac -d /tmp/studyflow-tests app/src/main/java/app/studyflow/ThemeColors.java tests/ThemeColorsTest.java
           java -cp /tmp/studyflow-tests app.studyflow.ThemeColorsTest
+      - name: Test study tools
+        run: |
+          javac -d /tmp/studyflow-tests app/src/main/java/app/studyflow/StudyTools.java tests/StudyToolsTest.java
+          java -cp /tmp/studyflow-tests app.studyflow.StudyToolsTest
       - name: Build and lint
         run: gradle --no-daemon assembleDebug lintDebug
       - name: Upload installable test APK
         uses: actions/upload-artifact@v4
         with:
-          name: StudyFlow-0.3.0-debug
+          name: StudyFlow-0.4.0-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30

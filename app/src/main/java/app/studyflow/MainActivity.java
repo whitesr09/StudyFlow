@@ -108,7 +108,7 @@ public class MainActivity extends Activity {
         LinearLayout top=new LinearLayout(this); top.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("STUDYFLOW",12,accent,true); brand.setLetterSpacing(.2f); top.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
         top.addView(iconButton("settings","Settings",()->{tab="Settings";show();})); body.addView(top); gap(body,22);
-        if(tab.equals("Today")) today(); else if(tab.equals("Library")) library(); else if(tab.equals("Plan")) plan();else if(tab.equals("Appearance"))appearance();else if(tab.equals("Insights"))insights();else settings();
+        if(tab.equals("Today")) today(); else if(tab.equals("Library")) library(); else if(tab.equals("Plan")) plan();else if(tab.equals("Appearance"))appearance();else if(tab.equals("Insights"))insights();else if(tab.equals("Search"))workspaceSearch();else if(tab.equals("Cards"))flashcards();else if(tab.equals("History"))history();else if(tab.equals("Exams"))exams();else settings();
         nav=new LinearLayout(this); nav.setPadding(dp(14),dp(10),dp(14),dp(10)); nav.setBackgroundColor(bg);
         for(String item:new String[]{"Today","Library","Plan"}) {
             TextView b=button(item,tab.equals(item),()->{tab=item;selectedSubject=null;show();});
@@ -123,6 +123,9 @@ public class MainActivity extends Activity {
     }
     private void today() {
         title(LocalDate.now().format(shortDate),"Make room\nfor progress.","Your notes. Your pace. A clearer next step.");
+        goalSummary();
+        button(body,"Review flashcards",false,()->{tab="Cards";show();});
+        button(body,"Exam countdowns",false,()->{tab="Exams";show();});
         JSONObject active=store.find("chapters",store.root.optString("focusChapter"));
         if(active!=null)button(body,"Resume focus · "+active.optString("name"),true,()->openFocus(active));
         Planner.Result p=store.plan();
@@ -159,6 +162,8 @@ public class MainActivity extends Activity {
         if(selectedSubject!=null && store.find("subjects",selectedSubject)!=null) { subjectDetail();return; }
         title("Your workspace","Everything,\nin its place.","Subjects, chapters and notes. Saved on this device.");
         button(body,"Add subject  +",true,()->subjectForm(null)); gap(body,20);
+        button(body,"Search workspace",false,()->{tab="Search";show();});
+        button(body,"Flashcards & review",false,()->{tab="Cards";show();});
         recentDocuments();
         JSONArray a=store.array("subjects");List<JSONObject> ordered=new ArrayList<>();for(int i=0;i<a.length();i++)ordered.add(a.optJSONObject(i));ordered.sort((x,y)->Boolean.compare(y.optBoolean("pinned"),x.optBoolean("pinned")));
         if(a.length()==0) label(body,"Your library is ready for its first subject.",16,muted,false);
@@ -180,7 +185,7 @@ public class MainActivity extends Activity {
             JSONObject c=a.optJSONObject(i); if(!c.optString("subject").equals(selectedSubject))continue;count++;
             LinearLayout p=panel(body); label(p,c.optString("name"),21,ink,true);gap(p,5);
             label(p,c.optInt("remaining")==0?"Studied · add revision time when needed":c.optInt("remaining")+" min remaining · "+confidence(c.optInt("confidence")),13,muted,false);
-            button(p,"Open notes",true,()->notes(c));button(p,"Focus on this chapter",false,()->focus(c,25)); button(p,"Edit chapter / add revision",false,()->chapterForm(c));
+            button(p,"Flashcards",false,()->cardList(c));button(p,"Open notes",true,()->notes(c));button(p,"Focus on this chapter",false,()->focus(c,25)); button(p,"Edit chapter / add revision",false,()->chapterForm(c));
         }
         if(count==0) label(body,"Add chapters with estimated study minutes to generate your plan.",15,muted,false);
         button(body,"Delete subject",false,()->confirm("Delete subject?","Its chapters and attached notes will also be deleted from this app.","Delete","Keep",()->{
@@ -281,6 +286,7 @@ public class MainActivity extends Activity {
     private void deleteChapter(String id) {
         if(store.root.optString("focusChapter").equals(id))store.setting("focusChapter","");
         JSONArray ns=store.array("notes");for(int i=ns.length()-1;i>=0;i--) {JSONObject n=ns.optJSONObject(i);if(n.optString("chapter").equals(id)){deleteAttachment(n);ns.remove(i);}}
+        store.remove("cards","chapter",id);
         store.remove("chapters","id",id);
     }
     private void deleteAttachment(JSONObject n) { String file=n.optString("file");if(!file.isEmpty())new File(getFilesDir(),file).delete(); }
@@ -505,13 +511,14 @@ public class MainActivity extends Activity {
         LinearLayout appearance=panel(body);label(appearance,"Appearance",21,ink,true);gap(appearance,8);label(appearance,store.root.optString("theme","Midnight")+" · "+store.root.optString("accentMode","Theme")+" colors",14,muted,false);
         button(appearance,"Theme & accent colors  →",false,()->{tab="Appearance";show();});
         LinearLayout rhythm=panel(body);label(rhythm,"Study rhythm",21,ink,true);button(rhythm,"Weekly availability",false,()->budget(false));button(rhythm,"Study insights",false,()->{tab="Insights";show();});
+        button(rhythm,"Daily goal",false,this::goalForm);button(rhythm,"Session history",false,()->{tab="History";show();});
         LinearLayout privacy=panel(body);label(privacy,"Your space stays yours",20,ink,true);gap(privacy,8);label(privacy,"No account, ads, analytics or internet permission. Notes are copied into private app storage. Uninstalling removes your data; keep your original files.",14,muted,false);
         LinearLayout follow=panel(body);label(follow,"Follow",21,ink,true);gap(follow,6);label(follow,"Connect with the creator",13,muted,false);gap(follow,16);
         LinearLayout socials=new LinearLayout(this);socials.setGravity(Gravity.CENTER);follow.addView(socials);
         socials.addView(iconButton("instagram","Instagram · __nshd.__",()->openLink("https://www.instagram.com/__nshd.__?stkn=emExd3hxZndzN21o")));
         View spacer=new View(this);socials.addView(spacer,new LinearLayout.LayoutParams(dp(20),1));
         socials.addView(iconButton("whatsapp","WhatsApp · N S H D",()->openLink("https://wa.me/918590455801")));
-        gap(body,12);label(body,"STUDYFLOW  /  0.3.0",12,accent,true);gap(body,6);label(body,"Minimal edition · your space, your colors",13,muted,false);
+        gap(body,12);label(body,"STUDYFLOW  /  0.4.0",12,accent,true);gap(body,6);label(body,"Minimal edition · your space, your colors",13,muted,false);
         gap(body,26);TextView credit=text("MADE  BY  N S H D",12,muted,true);credit.setLetterSpacing(.16f);credit.setGravity(Gravity.CENTER);body.addView(credit);gap(body,12);
     }
     private void appearance() {
@@ -543,6 +550,7 @@ public class MainActivity extends Activity {
     }
     private void insights() {
         button(body,"← Today",false,()->{tab="Today";show();});gap(body,18);title("Study insights","Small steps add up.","Only minutes you actually logged appear here.");
+        button(body,"Browse session history",false,()->{tab="History";show();});
         LocalDate today=LocalDate.now();long total=0;int sessions=0;Map<LocalDate,Long> days=new HashMap<>();Map<String,Long> subjects=new LinkedHashMap<>();
         JSONArray logs=store.array("logs");for(int i=0;i<logs.length();i++){JSONObject log=logs.optJSONObject(i);try{LocalDate date=LocalDate.parse(log.optString("date"));long mins=Math.max(0,log.optInt("minutes"));if(date.isAfter(today))continue;days.put(date,days.getOrDefault(date,0L)+mins);total+=mins;sessions++;JSONObject chapter=store.find("chapters",log.optString("chapter"));JSONObject subject=chapter==null?null:store.find("subjects",chapter.optString("subject"));String id=subject==null?"Removed subjects":subject.optString("name");subjects.put(id,subjects.getOrDefault(id,0L)+mins);}catch(Exception ignored){}}
         LinearLayout hero=panel(body);label(hero,total+" minutes",32,accent,true);gap(hero,4);label(hero,sessions+" logged sessions · all time",14,muted,false);
@@ -551,6 +559,87 @@ public class MainActivity extends Activity {
         for(int i=6;i>=0;i--){LocalDate day=today.minusDays(i);long minutes=days.getOrDefault(day,0L);label(week,day.format(DateTimeFormatter.ofPattern("EEE d",Locale.getDefault()))+"  ·  "+minutes+" min",13,muted,false);ProgressBar bar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);bar.setMax(1000);bar.setProgress((int)(minutes*1000/max));bar.setProgressTintList(ColorStateList.valueOf(accent));bar.setProgressBackgroundTintList(ColorStateList.valueOf(line));bar.setContentDescription(minutes+" minutes on "+day);week.addView(bar,new LinearLayout.LayoutParams(-1,dp(10)));gap(week,12);}
         LinearLayout breakdown=panel(body);label(breakdown,"By subject · all time",20,ink,true);gap(breakdown,12);for(Map.Entry<String,Long> entry:subjects.entrySet()){label(breakdown,entry.getKey()+"  ·  "+entry.getValue()+" min",15,ink,false);gap(breakdown,12);}
     }
+    // Save each new feature transaction atomically; failed writes restore the in-memory state.
+    private void change(Runnable action) {
+        String before=store.root.toString();
+        try { action.run();store.save(); }
+        catch(Exception e) {try{store.root=new JSONObject(before);}catch(JSONException ignored){}throw new IllegalArgumentException("Could not save. Free some storage and try again.");}
+    }
+    private Map<LocalDate,Integer> studyDays() {
+        Map<LocalDate,Integer> days=new HashMap<>();JSONArray logs=store.array("logs");
+        for(int i=0;i<logs.length();i++){JSONObject l=logs.optJSONObject(i);try{LocalDate d=LocalDate.parse(l.optString("date"));if(!d.isAfter(LocalDate.now()))days.put(d,days.getOrDefault(d,0)+Math.max(0,l.optInt("minutes")));}catch(Exception ignored){}}
+        return days;
+    }
+    private void goalSummary() {
+        int goal=store.root.optInt("goal",30),done=store.usedToday();
+        LinearLayout p=panel(body);label(p,"DAILY GOAL",11,accent,true);gap(p,8);
+        label(p,done+" / "+goal+" min",24,ink,true);
+        ProgressBar progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setMax(goal);progress.setProgress(Math.min(goal,done));progress.setProgressTintList(ColorStateList.valueOf(accent));progress.setProgressBackgroundTintList(ColorStateList.valueOf(line));p.addView(progress,new LinearLayout.LayoutParams(-1,dp(12)));
+        label(p,StudyTools.streak(studyDays(),LocalDate.now())+" day study streak · any logged study counts",12,muted,false);
+        button(p,done>=goal?"Goal reached · edit goal":"Set daily goal",false,this::goalForm);
+    }
+    private void goalForm() {
+        LinearLayout f=form();EditText value=field(f,"Daily goal in minutes",String.valueOf(store.root.optInt("goal",30)),true);
+        label(f,"Your personal target is separate from planning availability. Streaks count consecutive days with logged study; today can still be in progress.",14,muted,false);
+        formDialog("A small daily commitment",f,"Save goal",()->{int n=number(value,1,720);change(()->store.setting("goal",n));show();});
+    }
+    private void exams() {
+        title("Exam countdowns","See what is ahead.","Days remaining and chapter completion, ordered by exam date.");
+        List<JSONObject> subjects=new ArrayList<>();JSONArray a=store.array("subjects");for(int i=0;i<a.length();i++)subjects.add(a.optJSONObject(i));subjects.sort(Comparator.comparing(x->x.optString("exam")));
+        if(subjects.isEmpty())label(body,"Add a subject and exam date in Library to begin.",16,muted,false);
+        for(JSONObject s:subjects){long days=java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(),LocalDate.parse(s.optString("exam")));int total=0,done=0,remaining=0;
+            JSONArray cs=store.array("chapters");for(int i=0;i<cs.length();i++){JSONObject c=cs.optJSONObject(i);if(c.optString("subject").equals(s.optString("id"))){total++;remaining+=c.optInt("remaining");if(c.optInt("remaining")==0)done++;}}
+            LinearLayout p=panel(body);label(p,days==0?"EXAM TODAY":days<0?"EXAM PASSED":days+" DAYS TO GO",12,accent,true);gap(p,10);label(p,s.optString("name"),23,ink,true);label(p,s.optString("exam")+" · "+done+" / "+total+" chapters studied",14,muted,false);label(p,remaining+" planned minutes remaining",14,muted,false);
+            button(p,"Open subject",false,()->{selectedSubject=s.optString("id");tab="Library";show();});
+        }
+    }
+    private void workspaceSearch() {
+        title("Workspace search","Find your next thought.","Search subjects, chapters, written notes and attachment names. Document contents are searchable inside their reader.");
+        EditText query=field(body,"Search your workspace","",false);LinearLayout results=column();body.addView(results);
+        Runnable update=()->{results.removeAllViews();String q=query.getText().toString().trim().toLowerCase(Locale.ROOT);if(q.isEmpty()){label(results,"Type to find something in your workspace.",14,muted,false);return;}int count=0;
+            for(String type:new String[]{"subjects","chapters","notes"}){JSONArray a=store.array(type);for(int i=0;i<a.length();i++){JSONObject item=a.optJSONObject(i);String searchable=item.optString("name")+(type.equals("notes")&&item.optString("type").equals("text")?" "+item.optString("content"):"");if(!searchable.toLowerCase(Locale.ROOT).contains(q))continue;count++;if(count>50)continue;
+                LinearLayout p=panel(results);label(p,type.toUpperCase(Locale.ROOT),11,accent,true);label(p,item.optString("name"),18,ink,true);button(p,"Open",false,()->{if(type.equals("subjects")){selectedSubject=item.optString("id");tab="Library";show();}else if(type.equals("chapters"))notes(item);else{JSONObject c=store.find("chapters",item.optString("chapter"));if(c!=null){if(item.optString("type").equals("text"))editNote(c,item);else readFile(item);}}});
+            }}label(results,count==0?"No matches. Try another word.":count>50?"Showing 50 matches. Refine your search.":count+" matches",14,muted,false);
+        };
+        query.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int n){}public void onTextChanged(CharSequence s,int st,int before,int count){update.run();}public void afterTextChanged(android.text.Editable e){}});update.run();
+    }
+    private int historyLimit=30;
+    private void history() {
+        title("Session history","Your effort, remembered.","Actual logged minutes. Flashcard reviews are kept separate from study-time logs.");
+        List<JSONObject> logs=new ArrayList<>();JSONArray a=store.array("logs");for(int i=0;i<a.length();i++)logs.add(a.optJSONObject(i));logs.sort((x,y)->y.optString("date").compareTo(x.optString("date")));
+        if(logs.isEmpty())label(body,"Log a study session to start your history.",16,muted,false);
+        for(int i=0;i<Math.min(historyLimit,logs.size());i++){JSONObject l=logs.get(i),c=store.find("chapters",l.optString("chapter"));LinearLayout p=panel(body);label(p,l.optString("date")+" · "+l.optInt("minutes")+" MIN",12,accent,true);label(p,c==null?"Removed chapter":c.optString("name"),20,ink,true);if(c!=null){JSONObject s=store.find("subjects",c.optString("subject"));if(s!=null)label(p,s.optString("name"),13,muted,false);button(p,"Open chapter notes",false,()->notes(c));}}
+        if(logs.size()>historyLimit)button(body,"Show 30 more",false,()->{historyLimit+=30;show();});
+    }
+    private void flashcards() {
+        title("Active recall","Make knowledge stick.","Write a question, reveal the answer, then choose when to revisit it. Reviews do not log study minutes.");
+        int due=0;JSONArray cards=store.array("cards");for(int i=0;i<cards.length();i++)if(cardDue(cards.optJSONObject(i)))due++;
+        LinearLayout p=panel(body);label(p,due+" cards ready",26,accent,true);label(p,cards.length()+" cards in your workspace",14,muted,false);if(due>0)button(p,"Start due review",true,()->reviewNext(0));
+        JSONArray cs=store.array("chapters");if(cs.length()==0)label(body,"Create a chapter in Library, then add your first flashcard.",16,muted,false);
+        for(int i=0;i<cs.length();i++){JSONObject c=cs.optJSONObject(i);int count=0;for(int j=0;j<cards.length();j++)if(cards.optJSONObject(j).optString("chapter").equals(c.optString("id")))count++;button(body,c.optString("name")+" · "+count+" cards",false,()->cardList(c));}
+    }
+    private boolean cardDue(JSONObject c) {return c.optString("due",LocalDate.now().toString()).compareTo(LocalDate.now().toString())<=0;}
+    private void cardList(JSONObject chapter) {
+        LinearLayout f=form();final AlertDialog[] d={null};button(f,"Add flashcard",true,()->{d[0].dismiss();cardForm(chapter,null);});JSONArray a=store.array("cards");int count=0;
+        for(int i=0;i<a.length();i++){JSONObject c=a.optJSONObject(i);if(!c.optString("chapter").equals(chapter.optString("id")))continue;count++;LinearLayout p=panel(f);label(p,c.optString("question"),18,ink,true);label(p,cardDue(c)?"Ready for review":"Next review · "+c.optString("due"),12,accent,false);button(p,"Edit card",false,()->{d[0].dismiss();cardForm(chapter,c);});}
+        if(count==0)label(f,"Try a definition, a mechanism, or a question you keep forgetting.",14,muted,false);d[0]=sheet(chapter.optString("name"),f,"Close",null);
+    }
+    private void cardForm(JSONObject chapter,JSONObject existing) {
+        LinearLayout f=form();EditText question=field(f,"Question",existing==null?"":existing.optString("question"),false),answer=field(f,"Answer",existing==null?"":existing.optString("answer"),false);answer.setSingleLine(false);answer.setMinLines(3);answer.setGravity(Gravity.TOP);
+        final AlertDialog[] dialog={null};
+        if(existing!=null)button(f,"Delete flashcard",false,()->confirm("Delete flashcard?","Its review schedule will also be removed.","Delete","Keep",()->{change(()->store.remove("cards","id",existing.optString("id")));dialog[0].dismiss();show();}));
+        dialog[0]=formDialog(existing==null?"New flashcard":"Edit flashcard",f,"Save card",()->{String q=required(question),a=required(answer);if(q.length()>2000||a.length()>10000)throw new IllegalArgumentException("Keep questions under 2,000 and answers under 10,000 characters.");if(store.find("chapters",chapter.optString("id"))==null)throw new IllegalArgumentException("This chapter no longer exists.");if(existing!=null&&store.find("cards",existing.optString("id"))==null)throw new IllegalArgumentException("This card no longer exists.");
+            change(()->{if(existing==null)store.array("cards").put(Store.object("id",Store.id(),"chapter",chapter.optString("id"),"question",q,"answer",a,"due",LocalDate.now().toString(),"interval",0));else try{JSONObject current=store.find("cards",existing.optString("id"));current.put("question",q);current.put("answer",a);}catch(JSONException e){throw new IllegalArgumentException(e);}});show();
+        });
+    }
+    private void reviewNext(int reviewed) {
+        JSONObject next=null;JSONArray a=store.array("cards");for(int i=0;i<a.length();i++){JSONObject c=a.optJSONObject(i);if(cardDue(c)&&(next==null||c.optString("due").compareTo(next.optString("due"))<0))next=c;}
+        if(next==null){LinearLayout f=form();label(f,reviewed+" cards reviewed. You are up to date for today.",18,ink,true);sheet("A little stronger",f,"Done",null);show();return;}
+        final JSONObject c=next;LinearLayout f=form();label(f,reviewed+" reviewed this session",12,accent,true);gap(f,16);label(f,c.optString("question"),23,ink,true);gap(f,16);LinearLayout reveal=column();reveal.setVisibility(View.GONE);label(reveal,c.optString("answer"),18,ink,false);gap(reveal,16);label(reveal,"When should this card return?",14,muted,false);final AlertDialog[] dialog={null};
+        for(int rating=0;rating<3;rating++){int days=StudyTools.interval(c.optInt("interval"),rating);String name=new String[]{"Again","Good","Easy"}[rating];button(reveal,name+" · "+days+(days==1?" day":" days"),rating==1,()->{try{change(()->{try{JSONObject current=store.find("cards",c.optString("id"));current.put("interval",days);current.put("due",LocalDate.now().plusDays(days).toString());current.put("reviews",current.optInt("reviews")+1);}catch(JSONException e){throw new IllegalArgumentException(e);}});dialog[0].dismiss();reviewNext(reviewed+1);}catch(IllegalArgumentException e){toast(e.getMessage());}});}
+        TextView flip=button("Reveal answer",true,()->{reveal.setVisibility(View.VISIBLE);entrance(reveal);});f.addView(flip);f.addView(reveal);flip.setOnClickListener(v->{flip.setVisibility(View.GONE);reveal.setVisibility(View.VISIBLE);entrance(reveal);});dialog[0]=sheet("Recall before revealing",f,"Finish for now",()->{tab="Cards";show();});
+    }
+
     private void exportNote(JSONObject note) {
         pendingExportNote=note.optString("id");Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.setType("text/plain");i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,note.optString("name","StudyFlow note").replaceAll("[/\\\\:*?\"<>|]","_")+".txt");
         try{startActivityForResult(i,EXPORT_NOTE);}catch(ActivityNotFoundException e){toast("No file-saving app is available on this phone.");}

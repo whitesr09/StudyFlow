@@ -2,6 +2,18 @@
 
 An offline Android workspace connecting chapter notes with a realistic exam plan.
 
+## Active recall edition — 0.4.0
+
+Five new offline features, using the existing minimalist themes and rounded forms:
+
+1. Chapter flashcards with editable questions/answers, a reveal step, and a due-review queue. Again schedules tomorrow; Good doubles the previous interval (initially two days); Easy triples it (initially four days), capped at 365 days. Reviews never silently log study minutes. Deleting a chapter removes its cards.
+2. Workspace search across subjects, chapters, written-note content and attachment names, with direct open actions and a 50-result limit. Attachment contents remain searchable inside the reader.
+3. Exam countdowns ordered by exam date with today/past states, chapter completion and remaining planned minutes.
+4. A configurable daily goal separate from planning availability, with a progress bar and consecutive study-day streak. Any positive logged study counts; an unfinished today retains yesterday's streak.
+5. Session history showing actual logged minutes, dates, subjects and links back to chapter notes, with 30-row pagination. Deleted chapters remain represented in history.
+
+Existing data is retained; the cards collection is initialized automatically. No new permissions, cloud services or Material 3 dependency. Flashcards and goal changes use atomic save with rollback on write failure. Android device visual testing remains required.
+
 ## Minimal edition — 0.3.0
 
 - All app confirmation forms, including focus discard and deletion, now use the themed dialog engine. Confidence is a themed choice sheet; exam dates use a themed month calendar with future-date validation. Form errors appear inline.
@@ -26,7 +38,7 @@ An offline Android workspace connecting chapter notes with a realistic exam plan
 
 ## Build from a phone
 
-Open **Actions → Build StudyFlow APK → Run workflow → main**. After the run succeeds, open its **Artifacts** section and download **StudyFlow-0.3.0-debug**. Extract the ZIP and install `app-debug.apk`. Pushes to main also trigger builds.
+Open **Actions → Build StudyFlow APK → Run workflow → main**. After the run succeeds, open its **Artifacts** section and download **StudyFlow-0.4.0-debug**. Extract the ZIP and install `app-debug.apk`. Pushes to main also trigger builds.
 
 The workflow runs scheduling invariants and accent-contrast tests plus document parser tests (Office/EPUB ordering, Unicode, malformed inputs, XML entity rejection and expansion limits), builds the APK, and runs Android lint using JDK 17, Gradle 8.9, and AGP 8.7.3. For a local build with Android SDK 35 and Gradle 8.9 installed, run `gradle assembleDebug lintDebug`. This repository does not yet contain a Gradle wrapper.
 

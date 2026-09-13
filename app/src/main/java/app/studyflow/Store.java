@@ -15,7 +15,7 @@ final class Store {
         file=new AtomicFile(new File(context.getFilesDir(),"studyflow.json"));
         if(file.getBaseFile().exists()) root=new JSONObject(new String(file.readFully(),StandardCharsets.UTF_8));
         else root=new JSONObject();
-        for(String key:new String[]{"subjects","chapters","notes","logs"})
+        for(String key:new String[]{"subjects","chapters","notes","logs","cards"})
             if(!root.has(key)) root.put(key,new JSONArray());
     }
     JSONArray array(String key) { return root.optJSONArray(key); }
