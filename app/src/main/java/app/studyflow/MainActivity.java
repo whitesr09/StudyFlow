@@ -124,7 +124,7 @@ public class MainActivity extends Activity {
         LinearLayout social=new LinearLayout(this);social.setGravity(Gravity.CENTER);footer.addView(social,new LinearLayout.LayoutParams(-1,-2));
         String[] names={"Instagram","WhatsApp","Telegram"},symbols={"instagram","whatsapp","telegram"},links={"https://www.instagram.com/__nshd.__?stkn=emExd3hxZndzN21o","https://wa.me/918590455801","https://t.me/nshd_0"};
         for(int i=0;i<names.length;i++){final String link=links[i];LinearLayout item=column();item.setGravity(Gravity.CENTER);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);social.addView(item,lp);item.addView(iconButton(symbols[i],names[i],()->openLink(link)));gap(item,8);centerLabel(item,names[i],12,muted,false);}
-        gap(footer,24);View divider=new View(this);divider.setBackgroundColor(line);footer.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));gap(footer,18);centerLabel(footer,"STUDYFLOW / 0.7.0",10,muted,true);gap(footer,8);TextView credit=text("MADE  BY  N S H D",12,ink,true);credit.setLetterSpacing(.13f);credit.setGravity(Gravity.CENTER);footer.addView(credit,new LinearLayout.LayoutParams(-1,-2));gap(footer,4);
+        gap(footer,24);View divider=new View(this);divider.setBackgroundColor(line);footer.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));gap(footer,18);centerLabel(footer,"STUDYFLOW / 0.7.1",10,muted,true);gap(footer,8);TextView credit=text("MADE  BY  N S H D",12,ink,true);credit.setLetterSpacing(.13f);credit.setGravity(Gravity.CENTER);footer.addView(credit,new LinearLayout.LayoutParams(-1,-2));gap(footer,4);
     }
     private void studyToolEntry(){button(body,"Study tools",false,()->go("Tools"));gap(body,12);}
     private void weeklySummary(){
@@ -341,7 +341,6 @@ public class MainActivity extends Activity {
     }
     private void subjectDetail() {
         JSONObject s=store.find("subjects",selectedSubject);
-        button(body,"← Back",false,this::navigateBack); gap(body,18);
         title("Subject workspace",s.optString("name"),"Exam · "+LocalDate.parse(s.optString("exam")).format(shortDate));
         button(body,"Add chapter  +",true,()->chapterForm(null)); button(body,"Edit subject / exam date",false,()->subjectForm(s)); gap(body,18);
         JSONArray a=store.array("chapters"); int count=0;
@@ -689,7 +688,6 @@ public class MainActivity extends Activity {
         followFooter();
     }
     private void appearance() {
-        button(body,"← Back",false,this::navigateBack);gap(body,20);
         title("Appearance","A space that feels like you.","Choose the surface. Set the color. Keep your focus.");
         LinearLayout preview=panel(body);label(preview,"LIVE PREVIEW",11,accent,true);gap(preview,12);label(preview,"Less noise. More clarity.",23,ink,true);gap(preview,8);label(preview,"Your subjects, notes and progress in one calm workspace.",14,muted,false);
         button(preview,"This is your accent",true,()->toast("Changes apply across StudyFlow."));
@@ -716,7 +714,7 @@ public class MainActivity extends Activity {
         for(int i=0;i<Math.min(3,recent.size());i++){JSONObject n=recent.get(i);LinearLayout p=panel(body);label(p,n.optString("name"),17,ink,true);gap(p,4);label(p,n.optString("type").equals("text")?"Written note":"Position "+n.optInt("page",1)+" saved",12,muted,false);button(p,"Continue reading  →",false,()->{JSONObject c=store.find("chapters",n.optString("chapter"));if(c==null)return;if(n.optString("type").equals("text"))editNote(c,n);else readFile(n);});}
     }
     private void insights() {
-        button(body,"← Back",false,this::navigateBack);gap(body,18);title("Study insights","Small steps add up.","Only minutes you actually logged appear here.");
+        title("Study insights","Small steps add up.","Only minutes you actually logged appear here.");
         button(body,"Browse session history",false,()->{tab="History";show();});
         LocalDate today=LocalDate.now();long total=0;int sessions=0;Map<LocalDate,Long> days=new HashMap<>();Map<String,Long> subjects=new LinkedHashMap<>();
         JSONArray logs=store.array("logs");for(int i=0;i<logs.length();i++){JSONObject log=logs.optJSONObject(i);try{LocalDate date=LocalDate.parse(log.optString("date"));long mins=Math.max(0,log.optInt("minutes"));if(date.isAfter(today))continue;days.put(date,days.getOrDefault(date,0L)+mins);total+=mins;sessions++;JSONObject chapter=store.find("chapters",log.optString("chapter"));JSONObject subject=chapter==null?null:store.find("subjects",chapter.optString("subject"));String id=subject==null?"Removed subjects":subject.optString("name");subjects.put(id,subjects.getOrDefault(id,0L)+mins);}catch(Exception ignored){}}

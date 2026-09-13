@@ -47,6 +47,19 @@ jobs:
           java -cp /tmp/studyflow-tests app.studyflow.NavigationTrailTest
       - name: Build and lint
         run: gradle --no-daemon assembleDebug assembleDebugAndroidTest lintDebug
+      - name: Verify original icon bytes in APK
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_STORED
+          source = Path('app/src/main/res/drawable-nodpi/studyflow_icon.jpg').read_bytes()
+          with ZipFile('app/build/outputs/apk/debug/app-debug.apk') as apk:
+              entries = [e for e in apk.infolist() if e.filename.endswith('/studyflow_icon.jpg')]
+              assert len(entries) == 1, 'Launcher image missing or duplicated'
+              assert apk.read(entries[0]) == source, 'Launcher image bytes changed'
+              assert entries[0].compress_type == ZIP_STORED, 'Launcher image was compressed'
+          print('Original full-resolution icon stored byte-for-byte without ZIP compression')
+          PY
       - name: Enable emulator acceleration
         run: sudo chmod 666 /dev/kvm
       - name: Android UI smoke checks
@@ -74,7 +87,7 @@ jobs:
       - name: Upload installable test APK
         uses: actions/upload-artifact@v4
         with:
-          name: StudyFlow-0.7.0-debug
+          name: StudyFlow-0.7.1-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -123,7 +136,7 @@ jobs:
           "$SIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk | grep -F "$(cat signing/release-sha256.txt)"
       - uses: actions/upload-artifact@v4
         with:
-          name: StudyFlow-0.7.0-signed-release
+          name: StudyFlow-0.7.1-signed-release
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
