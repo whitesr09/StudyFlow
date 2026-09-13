@@ -25,12 +25,16 @@ jobs:
           mkdir -p /tmp/studyflow-tests
           javac -d /tmp/studyflow-tests app/src/main/java/app/studyflow/Planner.java tests/PlannerTest.java
           java -cp /tmp/studyflow-tests app.studyflow.PlannerTest
+      - name: Test offline document reader
+        run: |
+          javac -d /tmp/studyflow-tests app/src/main/java/app/studyflow/DocumentText.java tests/DocumentTextTest.java
+          java -cp /tmp/studyflow-tests app.studyflow.DocumentTextTest
       - name: Build and lint
         run: gradle --no-daemon assembleDebug lintDebug
       - name: Upload installable test APK
         uses: actions/upload-artifact@v4
         with:
-          name: StudyFlow-0.1.0-debug
+          name: StudyFlow-0.2.0-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
