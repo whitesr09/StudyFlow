@@ -568,8 +568,8 @@ public class MainActivity extends Activity {
             button(p,"Open",true,()->{dialog[0].dismiss();if(n.optString("type").equals("text"))editNote(chapter,n);else readFile(n);});
             if(n.optString("type").equals("text"))button(p,"Export as text",false,()->{dialog[0].dismiss();exportNote(n);});
             button(p,"Delete note",false,()->confirm("Delete note?","This removes the copy saved in StudyFlow.","Delete","Keep",()->{
-                String id=n.optString("id"),file=n.optString("file");
-                if(commitRemoval(()->store.remove("notes","id",id),Collections.singletonList(file))){dialog[0].dismiss();notes(chapter);}
+                String noteId=n.optString("id"),file=n.optString("file");
+                if(commitRemoval(()->store.remove("notes","id",noteId),Collections.singletonList(file))){dialog[0].dismiss();notes(chapter);}
             }));
         }
         TextView empty=text(count==0?"No notes attached yet.":"No matching notes.",14,muted,false);empty.setVisibility(count==0?View.VISIBLE:View.GONE);f.addView(empty);
