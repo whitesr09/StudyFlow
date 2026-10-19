@@ -34,6 +34,10 @@ public class MainActivity extends Activity {
     private boolean minimal,lightTheme;
     private String pendingExportNote;
     private static final int EXPORT_NOTE=42;
+    private static final int BACKUP_EXPORT=44;
+    private static final int BACKUP_IMPORT=45;
+    private static final int REQUEST_REMINDER_PERMISSION=46;
+    private boolean backupBusy;
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final Handler handler=new Handler(Looper.getMainLooper());
     private String renderedTab;
@@ -51,6 +55,7 @@ public class MainActivity extends Activity {
         catch(Exception e) {
             colors();LinearLayout f=form();label(f,"Your saved file has been kept. Close the app and try again; no data has been reset.",16,ink,false);AlertDialog error=sheet("Could not open study data",f,"Close",this::finish);error.setCancelable(false);return;
         }
+        StudyReminder.schedule(this,store.root);
         if(state!=null) { tab=state.getString("tab","Today"); selectedSubject=state.getString("subject"); pendingChapter=state.getString("pending");pendingExportNote=state.getString("exportNote");pendingLayoutNote=state.getString("layoutNote");restoreTrail(state.getString("trail")); }
         restoringNavigation=state!=null&&navigation.current!=null;show();
         if(state!=null){String id=state.getString("reader");JSONObject n=id==null?null:store.find("notes",id);if(n!=null){String mode=state.getString("readerMode","");if(mode.equals("preview"))readOffice(n);else readFile(n,mode.equals("text"));}}restoringNavigation=false;
@@ -115,7 +120,38 @@ public class MainActivity extends Activity {
     }
     private LocalDate minimalPlanDate=LocalDate.now();
     private void minimalPlan(){title("Your rhythm","One day at a time.","Choose a day to see a focused plan.");button(body,"Weekly availability",false,()->budget(false));gap(body,16);HorizontalScrollView days=new HorizontalScrollView(this);days.setHorizontalScrollBarEnabled(false);LinearLayout dates=new LinearLayout(this);days.addView(dates);body.addView(days);for(int i=0;i<14;i++){LocalDate date=LocalDate.now().plusDays(i);boolean chosen=date.equals(minimalPlanDate);TextView day=text(date.format(DateTimeFormatter.ofPattern("EEE\nd",Locale.getDefault())),13,chosen?onAccent:ink,true);day.setTextColor(chosen?onAccent:ink);day.setGravity(Gravity.CENTER);day.setBackground(shape(chosen?accent:card,12));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(56),dp(66));lp.setMargins(0,0,dp(8),0);dates.addView(day,lp);day.setFocusable(true);day.setContentDescription(date.toString());day.setOnClickListener(v->{minimalPlanDate=date;show();});if(chosen)days.post(()->days.smoothScrollTo(day.getLeft(),0));}gap(body,22);label(body,minimalPlanDate.format(shortDate),20,ink,true);gap(body,12);Planner.Result p=store.plan();if(p.unscheduledMinutes>0)warning(p.unscheduledMinutes+" minutes cannot fit before your exams.");int count=0;for(Planner.Session session:p.sessions)if(session.date.equals(minimalPlanDate)){sessionCard(session);count++;}if(count==0)label(body,"No sessions planned for this day.",15,muted,false);button(body,"Browse all upcoming sessions",false,()->{LinearLayout f=form();int shown=0;for(Planner.Session session:p.sessions){label(f,session.date+" · "+session.topic.subject+" · "+session.topic.title+" · "+session.minutes+" min",14,ink,false);gap(f,12);if(++shown>=100)break;}if(shown==0)label(f,"Your plan will appear when you add chapters.",14,muted,false);sheet("Upcoming · first 100 sessions",f,"Close",null);});}
-    private void minimalSettings(){title("Your workspace","Make it personal.","Quiet tools. Thoughtful details.");label(body,"APPEARANCE",11,muted,true);gap(body,12);button(body,"Theme & accent colors",false,()->go("Appearance"));gap(body,24);label(body,"STUDY PRACTICE",11,muted,true);button(body,"Daily goal",false,this::goalForm);button(body,"Weekly availability",false,()->budget(false));button(body,"Session history",false,()->go("History"));button(body,"Study insights",false,()->go("Insights"));button(body,"Study tools",false,()->go("Tools"));gap(body,24);label(body,"ON THIS DEVICE",11,muted,true);gap(body,10);label(body,"Your notes stay private. No account or cloud service. Keep original files: uninstalling removes saved data.",14,muted,false);followFooter();}
+    private void minimalSettings(){title("Your workspace","Make it personal.","Quiet tools. Thoughtful details.");label(body,"APPEARANCE",11,muted,true);gap(body,12);button(body,"Theme & accent colors",false,()->go("Appearance"));gap(body,24);label(body,"STUDY PRACTICE",11,muted,true);button(body,"Daily goal",false,this::goalForm);button(body,"Weekly availability",false,()->budget(false));button(body,"Session history",false,()->go("History"));button(body,"Study insights",false,()->go("Insights"));button(body,"Study tools",false,()->go("Tools"));addDataAndReminderSettings();followFooter();}
+
+    private void addDataAndReminderSettings(){
+        gap(body,24);label(body,"DATA & REMINDERS",11,muted,true);
+        button(body,"Back up all study data",true,this::chooseBackupExport);
+        button(body,"Restore backup · merge",false,this::chooseBackupImport);
+        label(body,"Backups include your study records and copied attachments and are not encrypted. Save them somewhere private. Restore keeps current records, skips matching IDs, and only fills preferences that are not already set.",13,muted,false);
+        gap(body,14);
+        boolean enabled=store.root.optBoolean("remindersEnabled");
+        String time=String.format(Locale.getDefault(),"%02d:%02d",store.root.optInt("reminderHour",9),store.root.optInt("reminderMinute",0));
+        button(body,enabled?"Daily local reminder · "+time:"Set up local study reminders",false,enabled?this::chooseReminderTime:this::enableReminder);
+        if(enabled)button(body,"Turn off study reminders",false,this::disableReminder);
+        label(body,"Reminders stay on this device. No account or internet access is used. Keep a backup somewhere safe before uninstalling.",13,muted,false);
+    }
+    private void enableReminder(){chooseReminderTime();}
+    private void chooseReminderTime(){
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},REQUEST_REMINDER_PERMISSION);return;
+        }
+        int hour=Math.max(0,Math.min(23,store.root.optInt("reminderHour",9)));
+        int minute=Math.max(0,Math.min(59,store.root.optInt("reminderMinute",0)));
+        new TimePickerDialog(this,(picker,h,m)->{
+            String before=store.root.toString();store.setting("remindersEnabled",true);store.setting("reminderHour",h);store.setting("reminderMinute",m);
+            if(save()){StudyReminder.schedule(this,store.root);show();toast("Daily reminders are on. They appear only when cards or assignments are due.");}
+            else try{store.root=new JSONObject(before);}catch(JSONException ignored){}
+        },hour,minute,android.text.format.DateFormat.is24HourFormat(this)).show();
+    }
+    private void disableReminder(){
+        String before=store.root.toString();store.setting("remindersEnabled",false);
+        if(save()){StudyReminder.cancel(this);show();toast("Study reminders are off.");}
+        else try{store.root=new JSONObject(before);}catch(JSONException ignored){}
+    }
 
     private void centerLabel(LinearLayout parent,String value,int size,int color,boolean bold){TextView t=text(value,size,color,bold);t.setGravity(Gravity.CENTER);parent.addView(t,new LinearLayout.LayoutParams(-1,-2));}
     private void followFooter(){
@@ -352,8 +388,13 @@ public class MainActivity extends Activity {
         }
         if(count==0) label(body,"Add chapters with estimated study minutes to generate your plan.",15,muted,false);
         button(body,"Delete subject",false,()->confirm("Delete subject?","Its chapters and attached notes will also be deleted from this app.","Delete","Keep",()->{
-                JSONArray cs=store.array("chapters");for(int i=cs.length()-1;i>=0;i--)if(cs.optJSONObject(i).optString("subject").equals(selectedSubject))deleteChapter(cs.optJSONObject(i).optString("id"));
-                store.remove("subjects","id",selectedSubject);selectedSubject=null;saveAndShow();
+                String subjectId=selectedSubject;
+                List<String> files=attachmentsForSubject(subjectId);
+                if(commitRemoval(()->{
+                    JSONArray cs=store.array("chapters");
+                    for(int i=cs.length()-1;i>=0;i--)if(cs.optJSONObject(i).optString("subject").equals(subjectId))deleteChapterRecords(cs.optJSONObject(i).optString("id"));
+                    store.remove("subjects","id",subjectId);
+                },files)){selectedSubject=null;show();}
             }));
     }
     private final class Choice extends TextView {
@@ -440,7 +481,10 @@ public class MainActivity extends Activity {
         label(f,"Confidence",13,muted,false);Choice confidence=new Choice();
 
         confidence.setSelection(existing==null?0:existing.optInt("confidence"));f.addView(confidence);
-        if(existing!=null)button(f,"Delete chapter",false,()->confirm("Delete chapter?","Attached notes will also be removed.","Delete","Keep",()->{deleteChapter(existing.optString("id"));saveAndShow();}));
+        if(existing!=null)button(f,"Delete chapter",false,()->confirm("Delete chapter?","Attached notes will also be removed.","Delete","Keep",()->{
+            String id=existing.optString("id");
+            if(commitRemoval(()->deleteChapterRecords(id),attachmentsForChapter(id)))show();
+        }));
         formDialog(existing==null?"New chapter":"Edit chapter",f,"Save",()->{
             String n=required(name);int m=number(mins,0,10000);
             if(existing!=null && store.find("chapters",existing.optString("id"))==null) throw new IllegalArgumentException("This chapter has been deleted. Close this form.");
@@ -449,13 +493,40 @@ public class MainActivity extends Activity {
             saveAndShow();
         });
     }
-    private void deleteChapter(String id) {
+    private void deleteChapterRecords(String id) {
         if(store.root.optString("focusChapter").equals(id))store.setting("focusChapter","");
-        JSONArray ns=store.array("notes");for(int i=ns.length()-1;i>=0;i--) {JSONObject n=ns.optJSONObject(i);if(n.optString("chapter").equals(id)){deleteAttachment(n);ns.remove(i);}}
+        JSONArray ns=store.array("notes");for(int i=ns.length()-1;i>=0;i--) {JSONObject n=ns.optJSONObject(i);if(n.optString("chapter").equals(id))ns.remove(i);}
         store.remove("cards","chapter",id);
         store.remove("chapters","id",id);
     }
-    private void deleteAttachment(JSONObject n) { String file=n.optString("file");if(!file.isEmpty())new File(getFilesDir(),file).delete(); }
+    private List<String> attachmentsForChapter(String chapterId) {
+        List<String> files=new ArrayList<>();JSONArray notes=store.array("notes");
+        for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note.optString("chapter").equals(chapterId)&&!note.optString("file").isEmpty())files.add(note.optString("file"));}
+        return files;
+    }
+    private List<String> attachmentsForSubject(String subjectId) {
+        Set<String> chapterIds=new HashSet<>();JSONArray chapters=store.array("chapters");
+        for(int i=0;i<chapters.length();i++){JSONObject chapter=chapters.optJSONObject(i);if(chapter.optString("subject").equals(subjectId))chapterIds.add(chapter.optString("id"));}
+        List<String> files=new ArrayList<>();JSONArray notes=store.array("notes");
+        for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(chapterIds.contains(note.optString("chapter"))&&!note.optString("file").isEmpty())files.add(note.optString("file"));}
+        return files;
+    }
+    private boolean commitRemoval(Runnable mutation,List<String> attachments) {
+        String before=store.root.toString();
+        try{mutation.run();}catch(RuntimeException e){try{store.root=new JSONObject(before);}catch(JSONException ignored){}toast("Could not remove this item. Nothing was deleted.");return false;}
+        if(!save()){try{store.root=new JSONObject(before);}catch(JSONException ignored){}return false;}
+        for(String file:attachments)if(!attachmentReferenced(file))deleteAttachmentFile(file);
+        return true;
+    }
+    private boolean attachmentReferenced(String filename) {
+        JSONArray notes=store.array("notes");
+        for(int i=0;i<notes.length();i++)if(notes.optJSONObject(i).optString("file").equals(filename))return true;
+        return false;
+    }
+    private void deleteAttachmentFile(String filename) {
+        if(filename==null||filename.isEmpty())return;
+        try{File directory=getFilesDir().getCanonicalFile(),file=new File(directory,filename).getCanonicalFile();if(directory.equals(file.getParentFile()))file.delete();}catch(IOException ignored){}
+    }
     private void plan() {
         title("A realistic rhythm","Your study\nroadmap.","Nearest exams first. Lower-confidence chapters next. Sessions stay within your available time.");
         button(body,"Set weekly availability",true,()->budget(false));gap(body,18);
@@ -496,7 +567,10 @@ public class MainActivity extends Activity {
             label(p,n.optString("type").equals("text")?"Written note":"Offline attachment · page "+n.optInt("page",1),12,muted,false);
             button(p,"Open",true,()->{dialog[0].dismiss();if(n.optString("type").equals("text"))editNote(chapter,n);else readFile(n);});
             if(n.optString("type").equals("text"))button(p,"Export as text",false,()->{dialog[0].dismiss();exportNote(n);});
-            button(p,"Delete note",false,()->confirm("Delete note?","This removes the copy saved in StudyFlow.","Delete","Keep",()->{deleteAttachment(n);store.remove("notes","id",n.optString("id"));save();dialog[0].dismiss();notes(chapter);}));
+            button(p,"Delete note",false,()->confirm("Delete note?","This removes the copy saved in StudyFlow.","Delete","Keep",()->{
+                String id=n.optString("id"),file=n.optString("file");
+                if(commitRemoval(()->store.remove("notes","id",id),Collections.singletonList(file))){dialog[0].dismiss();notes(chapter);}
+            }));
         }
         TextView empty=text(count==0?"No notes attached yet.":"No matching notes.",14,muted,false);empty.setVisibility(count==0?View.VISIBLE:View.GONE);f.addView(empty);
         search.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int n){}public void onTextChanged(CharSequence s,int st,int before,int count){String q=s.toString().toLowerCase(Locale.ROOT).trim();int visible=0;for(int i=0;i<rows.size();i++){boolean match=searchable.get(i).contains(q);rows.get(i).setVisibility(match?View.VISIBLE:View.GONE);if(match)visible++;}empty.setVisibility(visible==0?View.VISIBLE:View.GONE);}public void afterTextChanged(android.text.Editable e){}});
@@ -518,10 +592,76 @@ public class MainActivity extends Activity {
             if(!save()){try{store.root=new JSONObject(snapshot);}catch(JSONException ignored){}throw new IllegalArgumentException("Note could not be saved. Try again.");}toast("Note saved.");
         });
     }
+    private void chooseBackupExport(){
+        if(backupBusy){toast("A backup operation is already running.");return;}
+        Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);intent.setType("application/zip");intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.putExtra(Intent.EXTRA_TITLE,"StudyFlow-backup-"+LocalDate.now()+".zip");
+        try{startActivityForResult(intent,BACKUP_EXPORT);}catch(ActivityNotFoundException e){toast("No file save location is available.");}
+    }
+    private void chooseBackupImport(){
+        if(backupBusy){toast("A backup operation is already running.");return;}
+        Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.setType("*/*");intent.addCategory(Intent.CATEGORY_OPENABLE);
+        try{startActivityForResult(intent,BACKUP_IMPORT);}catch(ActivityNotFoundException e){toast("No file picker is available.");}
+    }
+    @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){
+        super.onRequestPermissionsResult(requestCode,permissions,grantResults);
+        if(requestCode!=REQUEST_REMINDER_PERMISSION)return;
+        if(grantResults.length>0&&grantResults[0]==android.content.pm.PackageManager.PERMISSION_GRANTED)chooseReminderTime();
+        else toast("Notifications are still off. Allow them in Android settings to use study reminders.");
+    }
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
         if(request==IMPORT_LAYOUT){String owner=pendingLayoutNote;pendingLayoutNote=null;if(result==RESULT_OK&&data!=null&&data.getData()!=null&&owner!=null)importLayout(owner,data.getData());return;}
         if(request==EXPORT_NOTE){if(result!=RESULT_OK||data==null||data.getData()==null)return;JSONObject note=store.find("notes",pendingExportNote);pendingExportNote=null;if(note==null){toast("This note is no longer available.");return;}Uri destination=data.getData();String content=note.optString("name")+"\n\n"+note.optString("content");worker.execute(()->{try(OutputStream out=getContentResolver().openOutputStream(destination,"wt")){if(out==null)throw new IOException();out.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));runOnUiThread(()->toast("Note exported."));}catch(Exception e){runOnUiThread(()->toast("Could not export the note. Choose another location."));}});return;}
+        if(request==BACKUP_EXPORT){
+            if(result!=RESULT_OK||data==null||data.getData()==null)return;
+            Uri destination=data.getData();String snapshot=store.root.toString();backupBusy=true;toast("Creating a private StudyFlow backup…");
+            worker.execute(()->{try(OutputStream out=getContentResolver().openOutputStream(destination,"wt")){
+                if(out==null)throw new IOException("The selected file cannot be written.");
+                StudyBackup.export(getFilesDir(),new JSONObject(snapshot),out);
+                runOnUiThread(()->{backupBusy=false;toast("Backup saved. Keep a copy outside this device.");});
+            }catch(Exception e){runOnUiThread(()->{backupBusy=false;toast("Backup failed: "+safeError(e));});} });
+            return;
+        }
+        if(request==BACKUP_IMPORT){
+            if(result!=RESULT_OK||data==null||data.getData()==null)return;
+            Uri source=data.getData();String snapshot=store.root.toString();backupBusy=true;toast("Checking the backup before changing anything…");
+            worker.execute(()->{StudyBackup.RestorePlan plan=null;try(InputStream in=getContentResolver().openInputStream(source)){
+                if(in==null)throw new IOException("The selected backup cannot be opened.");
+                plan=StudyBackup.prepareRestore(getFilesDir(),in,new JSONObject(snapshot));
+                StudyBackup.RestorePlan ready=plan;
+                runOnUiThread(()->{
+                    backupBusy=false;
+                    if(isDestroyed()){ready.discard();return;}
+                    if(!store.root.toString().equals(snapshot)){ready.discard();toast("Study data changed while the backup was being checked. Please try again.");return;}
+                    boolean[] accepted={false};
+                    LinearLayout f=form();label(f,"Existing records stay in place. Records with matching IDs are skipped, and your current preferences take priority. New attachments will be copied into private storage.",16,muted,false);
+                    AlertDialog mergeDialog=sheet("Merge this backup?",f,"Merge backup",()->{
+                        if(!store.root.toString().equals(snapshot)){ready.discard();toast("Study data changed while this backup was open. Please try again.");return;}
+                        accepted[0]=true;backupBusy=true;toast("Copying backup attachments safely…");
+                        worker.execute(()->{
+                            StudyBackup.PreparedCommit prepared=null;
+                            try{
+                                prepared=StudyBackup.stageCommit(getFilesDir(),ready);
+                                StudyBackup.PreparedCommit staged=prepared;
+                                runOnUiThread(()->{
+                                    backupBusy=false;
+                                    if(isDestroyed()){staged.discard();return;}
+                                    if(!store.root.toString().equals(snapshot)){staged.discard();toast("Study data changed while attachments were copied. No backup records were added.");return;}
+                                    try{StudyBackup.finishCommit(store,staged);StudyReminder.schedule(MainActivity.this,store.root);show();toast("Backup merged. Your existing study data was kept.");}
+                                    catch(Exception e){toast("Restore failed. Existing data was kept: "+safeError(e));}
+                                });
+                            }catch(Exception e){
+                                if(prepared==null)ready.discard();else prepared.discard();
+                                runOnUiThread(()->{backupBusy=false;toast("Restore failed. Existing data was kept: "+safeError(e));});
+                            }
+                        });
+                    },"Cancel");
+                    mergeDialog.setOnDismissListener(d->{if(!accepted[0])ready.discard();});
+                });
+            }catch(Exception e){if(plan!=null)plan.discard();runOnUiThread(()->{backupBusy=false;toast("This backup could not be restored: "+safeError(e));});} });
+            return;
+        }
         if(request!=IMPORT||result!=RESULT_OK||data==null||data.getData()==null)return;
         Uri uri=data.getData();String chapterId=pendingChapter;
         if(chapterId==null||store.find("chapters",chapterId)==null){toast("Choose a chapter and import again.");return;}
@@ -543,6 +683,7 @@ public class MainActivity extends Activity {
             }catch(Exception e){file.delete();runOnUiThread(()->toast("Import failed. Check the file and available storage. "+e.getMessage()));}
         });
     }
+    private String safeError(Exception error){String message=error.getMessage();return message==null||message.trim().isEmpty()?"check the selected file and available storage":message;}
     private void readFile(JSONObject note) {readFile(note,false);}
     private void readFile(JSONObject note,boolean textOnly) {
         closeOffice();
@@ -685,6 +826,7 @@ public class MainActivity extends Activity {
         LinearLayout rhythm=panel(body);label(rhythm,"Study rhythm",21,ink,true);button(rhythm,"Weekly availability",false,()->budget(false));button(rhythm,"Study insights",false,()->{tab="Insights";show();});
         button(rhythm,"Study tools",false,()->go("Tools"));button(rhythm,"Daily goal",false,this::goalForm);button(rhythm,"Session history",false,()->{tab="History";show();});
         LinearLayout privacy=panel(body);label(privacy,"Your space stays yours",20,ink,true);gap(privacy,8);label(privacy,"No account, ads, analytics or internet permission. Notes are copied into private app storage. Uninstalling removes your data; keep your original files.",14,muted,false);
+        addDataAndReminderSettings();
         followFooter();
     }
     private void appearance() {

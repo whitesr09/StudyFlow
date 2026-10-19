@@ -2,7 +2,15 @@
 
 An offline Android workspace connecting chapter notes with a realistic exam plan.
 
-## Study kit edition — 0.6.0
+## Study kit edition — 0.7.1
+
+### Data safety and daily reminders
+
+- Note, chapter, and subject deletion now saves the metadata change first. If persistence fails, the in-memory state is restored and attachment files remain available; unreferenced files are removed only after a successful save.
+- Settings can export a versioned StudyFlow ZIP containing the study data and copied attachments. Restore is an explicit, idempotent merge: existing records stay, matching record IDs are skipped, current preferences win, and missing preferences can be filled from the backup. Attachments are validated and staged before they are linked into private storage (16 MB study-data limit, 100 MB per attachment, 500 MB total).
+- Backups are **not encrypted**. They may contain private notes and imported documents; save them to a location you trust. Keep a copy off-device before uninstalling or replacing a phone.
+- Optional daily reminders run locally at a chosen time. They notify only when review cards or assignments are due, can be disabled in Settings, and do not use exact-alarm or internet permissions. Android notification permission is requested only when reminders are enabled.
+- Android UI checks now run against API 26, 29, and 35. Instrumentation covers backup merge, duplicate-safe restore, attachment copying, path traversal rejection, and reminder due-count logic.
 
 UI fixes:
 - Cards now reserve space above and below their surfaces, including the Today momentum card after the exam shortcut.
@@ -65,7 +73,7 @@ Existing data is retained; the cards collection is initialized automatically. No
 
 ## Build from a phone
 
-Open **Actions → Build StudyFlow APK → Run workflow → main**. After the run succeeds, open its **Artifacts** section and download **StudyFlow-0.6.0-debug**. Extract the ZIP and install `app-debug.apk`. Pushes to main also trigger builds.
+Open **Actions → Build StudyFlow APK → Run workflow → main**. After the run succeeds, open its **Artifacts** section and download the debug APK artifact for the Android API level you want to test (the minimum supported API is 26). Extract the ZIP and install `app-debug.apk`. Pull requests and pushes to main also trigger builds.
 
 The workflow runs scheduling invariants and accent-contrast tests plus document parser tests (Office/EPUB ordering, Unicode, malformed inputs, XML entity rejection and expansion limits), builds the APK, and runs Android lint using JDK 17, Gradle 8.9, and AGP 8.7.3. For a local build with Android SDK 35 and Gradle 8.9 installed, run `gradle assembleDebug lintDebug`. This repository does not yet contain a Gradle wrapper.
 
@@ -73,11 +81,11 @@ This artifact is a debug-signed testing APK, not a production release. Fresh run
 
 ## Current boundaries
 
-- PDF highlighting, OCR, PDF search, automatic chapter mapping, full app backup/restore, background timers, notifications and AI are not implemented yet.
+- PDF highlighting, OCR and PDF text search are not implemented yet; image-only/scanned PDFs need an OCR engine and on-device model before that can be added without weakening the offline-first boundary. Automatic chapter mapping, background timers and AI are also not implemented.
 - Revision time is entered manually as remaining chapter work; confidence influences scheduling order but does not yet generate spaced repetitions.
 - Session progress is logged manually. The app never treats opening a note as completion.
 - Planning covers up to two years. The Plan screen shows the next 100 sessions for responsiveness.
-- Keep original note files. Private app storage is removed on uninstall, and this version has no backup/restore feature.
+- Keep original note files as an extra safeguard. Private app storage is removed on uninstall; export a backup and verify it before removing the app.
 
 ## Structure
 
@@ -86,6 +94,8 @@ This artifact is a debug-signed testing APK, not a production release. Fresh run
 `AttachmentProvider.java`: read-only attachment sharing.
 `FlowIcon.java`: scalable interface/social icons.
 `Store.java`: atomic JSON persistence and model adapters.
+`StudyBackup.java`: bounded, versioned export and merge-restore for records and attachments.
+`StudyReminder.java`: local due-counting and inexact reminder scheduling.
 `Planner.java`: deterministic Android-independent scheduling engine.
 `tests/PlannerTest.java`: deadline, capacity, days-off, completion and override invariants.
 

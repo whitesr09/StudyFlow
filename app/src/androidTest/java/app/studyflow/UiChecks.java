@@ -27,6 +27,49 @@ public class UiChecks extends Instrumentation {
     private View sheetRoot()throws Exception{return ((AlertDialog)field("latestSheet")).getWindow().getDecorView();}
     private void settle()throws Exception{waitForIdleSync();Thread.sleep(300);}
     private void screenshot(String name)throws Exception{settle();Bitmap bitmap=getUiAutomation().takeScreenshot();check(bitmap!=null,"Screenshot unavailable");File dir=new File(getTargetContext().getExternalFilesDir(null),"ui-checks");dir.mkdirs();try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}bitmap.recycle();}
+    private void backupRoundTrip()throws Exception{
+        Store current=(Store)field("store");Context context=getTargetContext();
+        String attachment="backup-fixture-"+java.util.UUID.randomUUID()+".txt";
+        File original=new File(context.getFilesDir(),attachment);
+        try(FileOutputStream out=new FileOutputStream(original)){out.write("offline attachment".getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+        JSONObject source=new JSONObject();source.put("theme","Paper");
+        source.put("subjects",new JSONArray().put(Store.object("id","backup-subject","name","Imported subject","exam",LocalDate.now().plusDays(20).toString())));
+        source.put("chapters",new JSONArray().put(Store.object("id","backup-chapter","subject","backup-subject","name","Imported chapter","remaining",45,"confidence",1)));
+        source.put("notes",new JSONArray().put(Store.object("id","backup-note","chapter","backup-chapter","name","Imported file","type","text/plain","file",attachment,"page",1)));
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();StudyBackup.export(context.getFilesDir(),source,bytes);
+        String priorTheme=current.root.optString("theme");int priorSubjects=current.array("subjects").length(),priorNotes=current.array("notes").length();
+        StudyBackup.RestorePlan plan=StudyBackup.prepareRestore(context.getFilesDir(),new ByteArrayInputStream(bytes.toByteArray()),current.root);
+        check(plan.mergedRoot.optString("theme").equals(priorTheme),"Merge overwrote a current preference");
+        check(plan.mergedRoot.optJSONArray("subjects").length()==priorSubjects+1,"Merge dropped or duplicated subjects");
+        org.json.JSONObject imported=plan.mergedRoot.optJSONArray("notes").optJSONObject(plan.mergedRoot.optJSONArray("notes").length()-1);
+        check(imported.optString("id").equals("backup-note"),"Imported note missing");
+        check(!imported.optString("file").equals(attachment),"Restore reused the archive filename");
+        StudyBackup.finishCommit(current,StudyBackup.stageCommit(context.getFilesDir(),plan));
+        String restoredName=current.find("notes","backup-note").optString("file");
+        check(new File(context.getFilesDir(),restoredName).isFile(),"Attachment was not restored");
+        check(current.array("notes").length()==priorNotes+1,"Study notes were not merged");
+        StudyBackup.RestorePlan repeat=StudyBackup.prepareRestore(context.getFilesDir(),new ByteArrayInputStream(bytes.toByteArray()),current.root);
+        StudyBackup.finishCommit(current,StudyBackup.stageCommit(context.getFilesDir(),repeat));
+        check(current.array("notes").length()==priorNotes+1,"Repeated restore duplicated a note");
+        check(current.find("subjects","backup-subject")!=null,"Merged subject missing");
+        current.remove("notes","id","backup-note");current.remove("chapters","id","backup-chapter");current.remove("subjects","id","backup-subject");current.save();
+        new File(context.getFilesDir(),restoredName).delete();original.delete();
+
+        ByteArrayOutputStream malicious=new ByteArrayOutputStream();
+        try(java.util.zip.ZipOutputStream zip=new java.util.zip.ZipOutputStream(malicious)){
+            zip.putNextEntry(new java.util.zip.ZipEntry("attachments/../escape"));zip.write(1);zip.closeEntry();
+        }
+        boolean rejected=false;
+        try{StudyBackup.prepareRestore(context.getFilesDir(),new ByteArrayInputStream(malicious.toByteArray()),current.root);}
+        catch(Exception expected){rejected=true;}
+        check(rejected,"Unsafe archive path was accepted");
+
+        JSONObject due=new JSONObject();
+        due.put("cards",new JSONArray().put(Store.object("id","due","due",LocalDate.now().toString())).put(Store.object("id","later","due",LocalDate.now().plusDays(1).toString())));
+        due.put("assignments",new JSONArray().put(Store.object("id","overdue","due",LocalDate.now().minusDays(1).toString(),"done",false)).put(Store.object("id","done","due",LocalDate.now().toString(),"done",true)));
+        int[] counts=StudyReminder.dueCounts(due,LocalDate.now());
+        check(counts[0]==1&&counts[1]==1,"Reminder due counts are incorrect");
+    }
     private void geometry()throws Exception{runOnMainSync(()->{try{LinearLayout body=(LinearLayout)field("body");int bottom=0;for(int i=0;i<body.getChildCount();i++){View v=body.getChildAt(i);if(v.getVisibility()==View.GONE)continue;check(v.getTop()>=bottom,"Overlapping body children "+i);bottom=v.getBottom();}LinearLayout root=(LinearLayout)field("root");View nav=(View)field("nav");check(root.getChildAt(0).getBottom()<=nav.getTop(),"Navigation overlays scroll content");}catch(Exception e){throw new RuntimeException(e);}});}
     private void theme(String value){runOnMainSync(()->{try{Store store=(Store)field("store");store.setting("theme",value);store.save();}catch(Exception e){throw new RuntimeException(e);}});screen("Today");}
     private void seed()throws Exception{
@@ -62,6 +105,7 @@ public class UiChecks extends Instrumentation {
         invoke("readFile",new Class[]{JSONObject.class},office);check(find(visibleRoot(),"Open original document")!=null,"Office original route missing");check(find(visibleRoot(),"Attach exported PDF")!=null,"Layout PDF route missing");invoke("navigateBack",new Class[]{});check(field("tab").equals("Library")&&!((Boolean)field("reading")),"Reader back failed");
         // Re-measure at a narrower width using the real view hierarchy.
         runOnMainSync(()->{try{LinearLayout root=(LinearLayout)field("root");int w=(int)(320*getTargetContext().getResources().getDisplayMetrics().density);root.measure(View.MeasureSpec.makeMeasureSpec(w,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(root.getHeight(),View.MeasureSpec.EXACTLY));root.layout(0,0,w,root.getMeasuredHeight());}catch(Exception e){throw new RuntimeException(e);}});geometry();
-        result.putString("stream","STUDYFLOW_UI_OK: spacing, footer, persistent review, empty/populated charts, assignments, inbox, revision and exact accent passed.\n");finish(Activity.RESULT_OK,result);
+        backupRoundTrip();
+        result.putString("stream","STUDYFLOW_UI_OK: spacing, footer, persistent review, empty/populated charts, assignments, inbox, revision, backup merge and reminders passed.\n");finish(Activity.RESULT_OK,result);
     }catch(Throwable e){result.putString("stream","STUDYFLOW_UI_FAILED: "+android.util.Log.getStackTraceString(e));finish(Activity.RESULT_CANCELED,result);}}
 }
