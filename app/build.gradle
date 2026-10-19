@@ -4,11 +4,30 @@ android {
     compileSdk 35
     defaultConfig {
         applicationId 'app.studyflow'
+        testInstrumentationRunner 'app.studyflow.UiChecks'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '0.1.0'
+        versionCode 8
+        versionName '0.7.1'
     }
+    androidResources { noCompress += ['jpg'] }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-    buildTypes { release { minifyEnabled false } }
+    signingConfigs {
+        permanent {
+            if (System.getenv('STUDYFLOW_KEYSTORE_PATH')) {
+                storeFile file(System.getenv('STUDYFLOW_KEYSTORE_PATH'))
+                storePassword System.getenv('STUDYFLOW_KEYSTORE_PASSWORD')
+                keyAlias 'studyflow-release'
+                keyPassword System.getenv('STUDYFLOW_KEYSTORE_PASSWORD')
+                storeType 'PKCS12'
+            }
+        }
+    }
+    buildTypes { release { minifyEnabled false; signingConfig signingConfigs.permanent } }
+}
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.name.toLowerCase().contains('release') } &&
+        (!System.getenv('STUDYFLOW_KEYSTORE_PATH') || !System.getenv('STUDYFLOW_KEYSTORE_PASSWORD'))) {
+        throw new GradleException('Release requires the permanent StudyFlow signing key. See SIGNING.md.')
+    }
 }

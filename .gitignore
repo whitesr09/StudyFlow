@@ -5,3 +5,7 @@ local.properties
 *.keystore
 .idea/
 *.iml
+
+*.p12
+*.pfx
+*signing-recovery*
