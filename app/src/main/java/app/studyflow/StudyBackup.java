@@ -242,7 +242,9 @@ final class StudyBackup {
 
     private static JSONObject merge(JSONObject current, JSONObject incoming) throws Exception {
         JSONObject merged = new JSONObject(current.toString());
-        for (String key : incoming.keySet()) {
+        java.util.Iterator<String> keys = incoming.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
             if (isCollection(key)) continue;
             if (!merged.has(key)) merged.put(key, incoming.get(key));
         }
