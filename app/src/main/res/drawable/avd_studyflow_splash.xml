@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  StudyFlow "Path of Progress" animated splash icon. Total duration 980 ms,
+  no looping. Timeline (all offsets in ms from animation start):
+    A   0-100   start dot fades in, scale 0.84 -> 1.0 (ease-out)
+    B 100-300   journeyPath trimPathEnd 0 -> 0.32
+    C 300-533   journeyPath -> 0.75; completionCheck starts at 420 -> 0.42
+    D 533-683   journeyPath -> 1.0; completionCheck -> 1.0
+    E 683-817   successSparkle scale 0.90 -> 1.08 -> 1.0, alpha -> 1, glow pulse
+    F 817-980   hold (splash_hold keeps the AVD clock at 980 ms; zero motion)
+  Target names match path/group names in @drawable/vec_studyflow_splash.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/vec_studyflow_splash">
+    <target android:name="routeStartDot" android:animation="@animator/splash_dot" />
+    <target android:name="journeyPath" android:animation="@animator/splash_journey" />
+    <target android:name="completionCheck" android:animation="@animator/splash_check" />
+    <target android:name="successSparkle" android:animation="@animator/splash_sparkle" />
+    <target android:name="optionalGlowLayer" android:animation="@animator/splash_glow" />
+    <target android:name="logoMark" android:animation="@animator/splash_hold" />
+</animated-vector>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phase E (683-817 ms): sparkle scale 0.90 -> 1.08 -> 1.0 about its own centre
+     (pivot is set on the successSparkle group in the vector), alpha 0.3 -> 1. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android" android:ordering="together">
+    <objectAnimator android:propertyName="scaleX" android:valueFrom="0.9" android:valueTo="0.9"
+        android:valueType="floatType" android:duration="683" android:startOffset="0" android:interpolator="@android:interpolator/linear" />
+    <objectAnimator android:propertyName="scaleX" android:valueFrom="0.9" android:valueTo="1.08"
+        android:valueType="floatType" android:duration="80" android:startOffset="683" android:interpolator="@android:interpolator/fast_out_slow_in" />
+    <objectAnimator android:propertyName="scaleX" android:valueFrom="1.08" android:valueTo="1"
+        android:valueType="floatType" android:duration="54" android:startOffset="763" android:interpolator="@android:interpolator/fast_out_slow_in" />
+    <objectAnimator android:propertyName="scaleY" android:valueFrom="0.9" android:valueTo="0.9"
+        android:valueType="floatType" android:duration="683" android:startOffset="0" android:interpolator="@android:interpolator/linear" />
+    <objectAnimator android:propertyName="scaleY" android:valueFrom="0.9" android:valueTo="1.08"
+        android:valueType="floatType" android:duration="80" android:startOffset="683" android:interpolator="@android:interpolator/fast_out_slow_in" />
+    <objectAnimator android:propertyName="scaleY" android:valueFrom="1.08" android:valueTo="1"
+        android:valueType="floatType" android:duration="54" android:startOffset="763" android:interpolator="@android:interpolator/fast_out_slow_in" />
+    <objectAnimator android:propertyName="alpha" android:valueFrom="0.3" android:valueTo="0.3"
+        android:valueType="floatType" android:duration="683" android:startOffset="0" android:interpolator="@android:interpolator/linear" />
+    <objectAnimator android:propertyName="alpha" android:valueFrom="0.3" android:valueTo="1"
+        android:valueType="floatType" android:duration="134" android:startOffset="683" android:interpolator="@android:interpolator/fast_out_slow_in" />
+</set>
