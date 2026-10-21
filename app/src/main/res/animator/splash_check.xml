@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- completionCheck trimPathEnd: hidden until 420 ms, 0.42 @533, 1.0 @683.
+     Path data draws in natural order: down into the vertex, then up to the end. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android" android:ordering="together">
+    <objectAnimator android:propertyName="trimPathEnd" android:valueFrom="0" android:valueTo="0"
+        android:valueType="floatType" android:duration="420" android:startOffset="0"
+        android:interpolator="@android:interpolator/linear" />
+    <objectAnimator android:propertyName="trimPathEnd" android:valueFrom="0" android:valueTo="0.42"
+        android:valueType="floatType" android:duration="113" android:startOffset="420"
+        android:interpolator="@android:interpolator/linear" />
+    <objectAnimator android:propertyName="trimPathEnd" android:valueFrom="0.42" android:valueTo="1"
+        android:valueType="floatType" android:duration="150" android:startOffset="533"
+        android:interpolator="@android:interpolator/fast_out_slow_in" />
+</set>

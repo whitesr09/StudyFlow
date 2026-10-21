@@ -34,6 +34,7 @@ public class MainActivity extends Activity {
     private final DateTimeFormatter shortDate=DateTimeFormatter.ofPattern("EEE, d MMM",Locale.getDefault());
 
     @Override public void onCreate(Bundle state) {
+        setTheme(R.style.AppTheme); // switch from LaunchTheme (manifest) to the app theme before any UI is built
         super.onCreate(state);
         try { store=new Store(this); }
         catch(Exception e) {

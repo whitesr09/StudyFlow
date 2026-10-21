@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ (API 31+) launch theme: system splash with the animated
+         StudyFlow icon. postSplashScreenTheme is intentionally NOT used;
+         MainActivity switches to AppTheme via setTheme() as the first line
+         of onCreate (one mechanism, all API levels). -->
+    <style name="LaunchTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@color/studyflow_splash_bg</item>
+        <item name="android:statusBarColor">@color/studyflow_splash_bg</item>
+        <item name="android:navigationBarColor">@color/studyflow_splash_bg</item>
+        <item name="android:windowSplashScreenBackground">@color/studyflow_splash_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/avd_studyflow_splash</item>
+        <item name="android:windowSplashScreenAnimationDuration">980</item>
+    </style>
+</resources>

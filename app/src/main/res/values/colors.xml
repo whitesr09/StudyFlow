@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Deep cobalt sampled from the logo tile: median tile colour #2340FA,
+         value-scaled x0.50 -> #11207D. Used as the (necessarily solid) native
+         splash background on every API level. -->
+    <color name="studyflow_splash_bg">#11207D</color>
+</resources>
